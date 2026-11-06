@@ -84,7 +84,8 @@ function validateUrl(raw: string, name: string): string {
 }
 
 export function loadConfig(): Config {
-  const enable = (process.env.NHPLUG_ENABLE_TRADING ?? "false").trim().toLowerCase();
+  // Personal ChatGPT deployment: enforce read-only, even if an environment variable is set.
+  // Never enable order tools through this fork without a separate reviewed code change.
   return {
     // NHPLUG_ 접두 변수를 우선 사용하되, 접두 없는 APP_KEY/APP_SECRET 도 허용
     appKey: required("NHPLUG_APP_KEY", process.env.NHPLUG_APP_KEY ?? process.env.APP_KEY),
@@ -103,7 +104,7 @@ export function loadConfig(): Config {
       process.env.NHPLUG_AUTH_URL ?? "https://api.nhplug.com:8443",
       "NHPLUG_AUTH_URL"
     ),
-    enableTrading: enable === "true" || enable === "1" || enable === "yes",
+    enableTrading: false,
     defaultAccount: (process.env.NHPLUG_DEFAULT_ACCOUNT ?? "").trim(),
   };
 }
