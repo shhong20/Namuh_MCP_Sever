@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Namuh personal MCP -> ChatGPT Secure MCP Tunnel (interactive WSL terminal only)
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+PROFILE=namuh-portfolio
+TUNNEL_ID="${1:-}"
+if [[ ! "$TUNNEL_ID" =~ ^tunnel_[[:alnum:]_-]+$ ]]; then
+  printf 'Usage: bash scripts/connect_chatgpt_tunnel.sh tunnel_<id>\n' >&2
+  exit 2
+fi
+if [[ ! -f .env || "$(stat -c '%a' .env)" != '600' ]]; then
+  echo 'Missing .env or permissions not 600; fix locally first.' >&2
+  exit 2
+fi
+if ! command -v tunnel-client >/dev/null 2>&1; then
+  echo 'tunnel-client not on PATH.' >&2
+  exit 2
+fi
+if [[ -e "$HOME/.config/tunnel-client/$PROFILE.yaml" ]]; then
+  echo 'A Namuh profile already exists. Refusing to overwrite it.' >&2
+  exit 2
+fi
+printf 'Paste your OpenAI Platform tunnel RUNTIME key (input hidden): ' >&2
+IFS= read -r -s CONTROL_PLANE_API_KEY
+printf '\n' >&2
+if [[ -z "$CONTROL_PLANE_API_KEY" ]]; then echo 'Empty runtime key.' >&2; exit 2; fi
+export CONTROL_PLANE_API_KEY
+trap 'unset CONTROL_PLANE_API_KEY' EXIT
+npm run build >/dev/null
+tunnel-client init --sample sample_mcp_stdio_local --profile "$PROFILE" --tunnel-id "$TUNNEL_ID" --mcp-command "node $PWD/dist/index.js" --health-listen-addr 127.0.0.1:0
+tunnel-client doctor --profile "$PROFILE" --explain
+printf '\nDoctor completed. Starting dedicated Namuh tunnel; keep this terminal open.\n'
+tunnel-client run --profile "$PROFILE"
