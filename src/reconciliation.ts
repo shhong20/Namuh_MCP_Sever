@@ -1,5 +1,6 @@
 import type { Config } from "./config.js";
-import { callRest } from "./client.js";
+import { callRest, callRestPage } from "./client.js";
+import { collectBrokerPages } from "./pagination.js";
 import { liveAccount, currentSeoulDate, listSnapshots } from "./history.js";
 
 type Raw = Record<string, any>;
@@ -22,6 +23,7 @@ export function reconcileAccountViews(asset:Raw,domestic:Raw,foreign:Raw){
  const assetUsRows=assetRows.filter((r:Raw)=>/외화|해외/.test(String(r.iem_mlf_nm??"")));
  const assetKrRows=assetRows.filter((r:Raw)=>/^(주식|ETF|ETN)$/.test(String(r.iem_mlf_nm??"")));
  const assetUsValue=assetUsRows.reduce((n:number,r:Raw)=>n+(num(r.eal_amt)??0),0);
+ const integratedRowSum=assetRows.reduce((n:number,r:Raw)=>n+(num(r.eal_amt)??0),0);
  const krPositions=domesticRows.reduce((n:number,r:Raw)=>n+(num(r.eal_amt)??0),0);
  const usPositions=foreignRows.reduce((n:number,r:Raw)=>n+(num(r.krw_eal_amt)??0),0);
  const asset0=asset.Output_0??{},kr0=domestic.Output_0??{},us0=foreign.Output_0??{};
@@ -46,6 +48,8 @@ export function reconcileAccountViews(asset:Raw,domestic:Raw,foreign:Raw){
   "국내/해외 보유증권만 합산한 값은 총순자산이 아니며 투자수익률 산정의 기초금액으로 사용할 수 없습니다.",
  ];
  if(assetSource.pagination_required)warnings.push("증권사 통합 자산 API에서 연속조회 응답 00218 수신: 목록과 합계가 부분 결과이며 추가 페이지를 수집하지 않았습니다.");
+ if(assetSource.complete && num(asset0.tot_aet_amt)!==null && Math.abs(integratedRowSum-Number(asset0.tot_aet_amt))>1)
+  warnings.push("수집된 통합 종목별 평가액 합계가 증권사 총자산 요약과 일치하지 않습니다. 증거금·외화예수금·기타 중복 표시 가능성을 검증하기 전에는 합산 금액을 순자산으로 사용하지 마세요.");
  if(factors.integrated_broker_net_assets_krw===0 && assetRows.length>0)
   warnings.push("통합 순자산 요약이 0이지만 종목 목록은 존재하므로 0원을 유효한 순자산으로 간주하지 않습니다.");
  return {
@@ -53,14 +57,17 @@ export function reconcileAccountViews(asset:Raw,domestic:Raw,foreign:Raw){
    sources:[assetSource,domesticSource,foreignSource],
    observed:{
      domestic_security_rows:domesticRows.length,us_security_rows:foreignRows.length,
-     integrated_first_page_rows:assetRows.length,
-     integrated_first_page_domestic_krw:round(assetKrRows.reduce((s:number,r:Raw)=>s+(num(r.eal_amt)??0),0)),
-     integrated_first_page_us_krw:round(assetUsValue),
+     integrated_collected_rows:assetRows.length,
+     integrated_collected_domestic_krw:round(assetKrRows.reduce((s:number,r:Raw)=>s+(num(r.eal_amt)??0),0)),
+     integrated_collected_us_krw:round(assetUsValue),
      domestic_holdings_krw:round(krPositions),us_holdings_krw:round(usPositions),
      combined_securities_only_krw:round(krPositions+usPositions),
      integrated_page_includes_us_securities:assetUsRows.length>0,
    },
    broker_reported_fields_not_additive:factors,
+   broker_reported_net_asset_candidate_krw:assetSource.complete && (num(asset0.nas_amt)??0)>0 ? num(asset0.nas_amt):null,
+   integrated_row_sum_krw:round(integratedRowSum),
+   integrated_rows_minus_reported_total_assets_krw:assetSource.complete && num(asset0.tot_aet_amt)!==null ? round(integratedRowSum-Number(asset0.tot_aet_amt)):null,
    verified_full_net_asset_krw:null,
    verified_external_flow_ledger:false,
    eligible_for_realized_portfolio_return:false,
@@ -91,16 +98,24 @@ export function classifyExternalTransactions(rows:Raw[]){
 export async function liveNetAssetAudit(config:Config){
  const act_no=await liveAccount(config);
  // Sequential, no loops or automatic 429 retries.
- const integrated=await callRest(config,"/krstock/inquiry/v1/assetStatus",{
+ const integratedPages=await collectBrokerPages((cts,ctsFlag)=>callRestPage(config,"/krstock/inquiry/v1/assetStatus",{
    act_no,eal_aly_cd:"2",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
- });
+ },cts,ctsFlag));
+ const integrated=integratedPages.data;
  const domestic=await callRest(config,"/krstock/inquiry/v1/balance",{
    act_no,bnc_bse_cd:"5",ltg_aot_dit_cd:"9",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
  });
  const overseas=await callRest(config,"/gbstock/inquiry/v1/balance",{
    act_no,qut_iqr_dit_cd:"9",fc_sec_trd_nat_cd:"200",cur_cd:"KRW",xns_dit_cd:"1"
  });
- return reconcileAccountViews(integrated,domestic,overseas);
+ const result=reconcileAccountViews(integrated,domestic,overseas);
+ return {
+  ...result,
+  integrated_pagination:integratedPages.audit,
+  audit_status:!integratedPages.audit.complete?"INCOMPLETE_SOURCE_PAGINATION_OR_ERROR":result.audit_status,
+  verified_full_net_asset_krw:null,
+  eligible_for_realized_portfolio_return:false,
+ };
 }
 export async function liveExternalFlowAudit(config:Config,month:string,monthDates:(month:string)=>{start:string;end:string}){
  const dates=monthDates(month);

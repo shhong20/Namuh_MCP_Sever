@@ -64,11 +64,18 @@ export class NhplugApiError extends Error {
  *    같은 rsp_cd 가 API 마다 정상일 수도 오류일 수도 있어 어떤 코드 목록도 기준이 될 수 없다.
  *    성공 여부는 응답을 받는 쪽(모델·사용자)이 rsp_msg 를 읽고 판단한다.
  */
+export interface BrokerPage {
+  data: any;
+  continuation: { cts: string | null; flag: string | null };
+}
+
 export async function callRest(
   config: Config,
   path: string,
   input: Record<string, unknown>,
-  cts?: string
+  cts?: string,
+  pageMetadata = false,
+  ctsFlag?: string
 ): Promise<any> {
   const url = `${config.baseUrl}${path}`;
   const body = JSON.stringify({ Input_0: input });
@@ -85,6 +92,7 @@ export async function callRest(
       "content-type": "application/json; charset=UTF-8",
     };
     if (cts) headers["cts"] = cts;
+    if (cts && ctsFlag) headers["cts_flag"] = ctsFlag;
 
     try {
       res = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
@@ -137,5 +145,17 @@ export async function callRest(
   // ---- HTTP 200 → 본문 그대로. 업무 판정은 하지 않는다 ----
   //      rsp_cd 를 해석하면 같은 코드가 API 마다 다른 뜻이라 반드시 오판한다.
   //      Output_* 와 rsp_cd·rsp_msg 가 모두 담긴 원본이 모델에게 그대로 전달된다.
+  if (pageMetadata) return {
+    data,
+    continuation: {
+      cts: res!.headers.get("cts")?.trim() || null,
+      flag: res!.headers.get("cts_flag")?.trim() || null,
+    },
+  } satisfies BrokerPage;
   return data;
+}
+
+/** Preserve opaque broker continuation headers without changing existing API callers. */
+export async function callRestPage(config: Config, path: string, input: Record<string, unknown>, cts?: string, ctsFlag?: string): Promise<BrokerPage> {
+  return callRest(config, path, input, cts, true, ctsFlag) as Promise<BrokerPage>;
 }
