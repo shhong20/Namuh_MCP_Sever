@@ -67,6 +67,9 @@ export function loadOperations(): ApiOperation[] {
       const op = methods.post;
       if (!op) continue;
       if (path.includes("#")) continue;
+      // The common spec also contains OAuth and account-list endpoints; do not expose
+      // credential/token operations via generic call_api discovery.
+      if (domain === "common" && !path.startsWith("/common/inquiry/v1/")) continue;
       const tags: string[] | undefined = op.tags;
       ops.push({
         domain,

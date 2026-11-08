@@ -7,6 +7,7 @@ import { registerPortfolioTools } from "./portfolio.js";
 import { registerHistoryTools } from "./history-tools.js";
 import { registerPerformanceTools } from "./performance-tools.js";
 import { registerReconciliationTools } from "./reconciliation-tools.js";
+import { registerCommonLedgerTools } from "./common-ledger-tools.js";
 
 async function main() {
   const config = loadConfig();
@@ -21,6 +22,7 @@ async function main() {
   registerHistoryTools(server, config);
   registerPerformanceTools(server, config);
   registerReconciliationTools(server, config);
+  registerCommonLedgerTools(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
