@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { registerTools } from "./tools.js";
 import { registerPortfolioTools } from "./portfolio.js";
+import { registerHistoryTools } from "./history-tools.js";
 
 async function main() {
   const config = loadConfig();
@@ -15,6 +16,7 @@ async function main() {
 
   registerTools(server, config);
   registerPortfolioTools(server, config);
+  registerHistoryTools(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
