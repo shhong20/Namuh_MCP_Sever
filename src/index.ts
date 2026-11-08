@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
 import { registerTools } from "./tools.js";
+import { registerPortfolioTools } from "./portfolio.js";
 
 async function main() {
   const config = loadConfig();
@@ -13,6 +14,7 @@ async function main() {
   });
 
   registerTools(server, config);
+  registerPortfolioTools(server, config);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

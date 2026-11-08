@@ -98,8 +98,7 @@ export function registerTools(server: McpServer, config: Config): void {
           hidden_count: hidden,
           how_to_enable:
             "주문(매수/매도/정정/취소) API 는 안전을 위해 기본 비활성 상태이며 목록에서 숨겨져 있습니다. " +
-            "사용하려면 MCP 설정(env)에 NHPLUG_ENABLE_TRADING=true 를 추가한 뒤 Claude Desktop 을 완전히 종료했다가 다시 실행하세요. " +
-            "실제 주문이 체결될 수 있으니 반드시 모의투자 환경에서 충분히 검증한 뒤 사용하세요.",
+            "이 ChatGPT 전용 서버에서는 환경변수만으로 거래를 활성화할 수 없습니다. 주문 기능은 코드 수준에서 차단되어 있습니다.",
         };
       }
       return textResult(result);
@@ -146,9 +145,11 @@ export function registerTools(server: McpServer, config: Config): void {
       if (!op) return errorResult(`operationId '${operationId}' 를 찾을 수 없습니다. list_apis 로 확인하세요.`);
       if (op.isTrading && !config.enableTrading) {
         return errorResult(
-          `'${operationId}' 는 주문(거래) API 입니다. 안전을 위해 기본 비활성 상태입니다. 실행하려면 서버 환경변수 NHPLUG_ENABLE_TRADING=true 로 설정 후 재시작하세요.`
+          `'${operationId}' 는 주문(거래) API 입니다. 안전을 위해 기본 비활성 상태입니다. 이 서버에서는 거래 기능을 활성화할 수 없습니다.`
         );
       }
+      const absent = op.inputFields.filter((f) => f.required && (input?.[f.name] === undefined || input?.[f.name] === null || input?.[f.name] === ""));
+      if (absent.length) return errorResult(`필수 입력 누락: ${absent.map(f => f.name).join(", ")}`);
       try {
         const res = await callRest(config, op.path, input ?? {}, cts);
         return textResult(res);
@@ -189,15 +190,21 @@ export function registerTools(server: McpServer, config: Config): void {
         .describe("계좌번호. 생략 시 NHPLUG_DEFAULT_ACCOUNT 환경변수 값 사용."),
     },
     async ({ account_no }) => {
-      const act = account_no ?? config.defaultAccount;
-      if (!act) return errorResult("계좌번호가 없습니다. account_no 를 넘기거나 NHPLUG_DEFAULT_ACCOUNT 를 설정하세요.");
+      let act = account_no ?? config.defaultAccount;
       try {
+        if (!act) {
+          const accounts = await callRest(config, "/n2/acctinfo", {});
+          const live = (accounts.Output_0 ?? []).filter((a: { acct_type?: string }) => a.acct_type === "01");
+          if (live.length !== 1) return errorResult("조회할 실계좌가 하나로 식별되지 않습니다. account_no 를 지정하세요.");
+          act = live[0].acct_no;
+        }
         const res = await callRest(config, "/krstock/inquiry/v1/balance", {
           act_no: act,
           bnc_bse_cd: "5",
           ltg_aot_dit_cd: "9",
           aet_bse: "2",
           qut_dit_cd: "UNT",
+          aly_qut_cd: "2",
         });
         return textResult(res);
       } catch (e) {

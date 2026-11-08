@@ -87,7 +87,7 @@ export async function callRest(
     if (cts) headers["cts"] = cts;
 
     try {
-      res = await fetch(url, { method: "POST", headers, body });
+      res = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
     } catch (e) {
       throw new NhplugApiError(
         `네트워크 오류. ${config.baseUrl} 접근 가능한 환경인지 확인하세요. 원인: ${String(e)}`,
