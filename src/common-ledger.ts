@@ -1,6 +1,7 @@
 import type { Config } from "./config.js";
 import { callRestPage, type BrokerPage } from "./client.js";
 import { liveAccount, monthDates, currentSeoulDate } from "./history.js";
+import { auditMatchedMovements } from "./cashflow-reconcile.js";
 
 type SourceRow = Record<string,unknown>;
 type PageResult = {
@@ -95,16 +96,20 @@ export function summarizeCommonLedger(
   const normalizedDeposits=redactedCommonRows(deposits.rows,"deposit");
   const normalizedTransactions=redactedCommonRows(transactions.rows,"transactions");
   const ambiguous=normalizedDeposits.filter(r=>r.direction_candidate==="unknown");
+  const crosscheck=auditMatchedMovements(normalizedDeposits,normalizedTransactions,deposits.audit.complete,transactions.audit.complete);
   return {
     month,
     sources:{deposit_withdrawal:deposits.audit,comprehensive_transactions:transactions.audit},
     cash_movements:normalizedDeposits,
+    cashflow_crosscheck:crosscheck,
     comprehensive_transactions:normalizedTransactions,
     counts:{
       deposit_withdrawal:normalizedDeposits.length,
       comprehensive_transactions:normalizedTransactions.length,
-      candidate_inflows:normalizedDeposits.filter(r=>r.direction_candidate==="in").length,
-      candidate_outflows:normalizedDeposits.filter(r=>r.direction_candidate==="out").length,
+      reported_credit_rows:normalizedDeposits.filter(r=>r.direction_candidate==="in").length,
+      candidate_inflows:crosscheck.categories.transfer_in_candidate,
+      reported_debit_rows:normalizedDeposits.filter(r=>r.direction_candidate==="out").length,
+      candidate_outflows:crosscheck.categories.transfer_out_candidate,
       unclear_direction:ambiguous.length,
     },
     all_source_pages_complete:deposits.audit.complete&&transactions.audit.complete,
