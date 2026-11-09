@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig } from "../dist/config.js";
 import { captureDaily } from "../dist/history.js";
+import { classifyCaptureError } from "../dist/capture-recovery.js";
 
 async function main(){
   const out=await captureDaily(loadConfig());
@@ -10,6 +11,7 @@ async function main(){
   }));
 }
 main().catch(e=>{
- console.error(JSON.stringify({decision:"SNAPSHOT_FAILED",reason:String(e instanceof Error?e.message:e).slice(0,300)}));
+ const failure=classifyCaptureError(e);
+ console.error(JSON.stringify({decision:"SNAPSHOT_FAILED",failure_kind:failure.kind,automatic_retry:false,manual_action:failure.manual_action}));
  process.exitCode=1;
 });
