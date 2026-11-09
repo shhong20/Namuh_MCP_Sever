@@ -7,10 +7,14 @@ import {liveNavCompositionAudit} from "./nav-composition.js";
 import {navAccountingTrend} from "./nav-accounting-trend.js";
 import {liveEvidenceCheck} from "./evidence-check.js";
 import {navAnomalyReport} from "./nav-anomaly.js";
+import {captureIntegrityReport} from "./capture-integrity.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_capture_integrity",
+    "보유주식과 NAV 후보 날짜별 파일의 존재·동일날짜 비교 가능 여부·수집 예정시각 전후·기간 공백을 점검합니다. API 호출 없이 저장소를 읽으며 과거 데이터를 현재 평가액으로 소급 채우지 않습니다.",
+    {},async()=>{try{return ok(await captureIntegrityReport());}catch(e){return fail(e);}});
   server.tool("portfolio_nav_anomaly_report",
     "기존 NAV 후보·보유증권 스냅샷을 조회하여 수집 누락, 항목합계 불일치, 담보 잔차, 연속 날짜 간 큰 변화를 감지합니다. 외부 API 호출·주문·알림 발송 없이 읽기 전용. 후보 평가액 변화는 투자수익률이 아닙니다.",
     {month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().describe("조회 월 YYYY-MM (미입력 전체)")},
