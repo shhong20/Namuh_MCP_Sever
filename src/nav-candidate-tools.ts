@@ -8,10 +8,14 @@ import {navAccountingTrend} from "./nav-accounting-trend.js";
 import {liveEvidenceCheck} from "./evidence-check.js";
 import {navAnomalyReport} from "./nav-anomaly.js";
 import {captureIntegrityReport} from "./capture-integrity.js";
+import {dailyCaptureGate} from "./daily-capture-gate.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_daily_capture_gate",
+    "매일 20:50 KST 이후 보유증권/NAV 스냅샷의 수집 여부·시각 차이·회계 불일치를 확인하는 읽기 전용 검증. 수익률·실거래·소급적재·증권사 자동 조회 없음.",
+    {},async()=>{try{return ok(await dailyCaptureGate());}catch(e){return fail(e);}});
   server.tool("portfolio_capture_integrity",
     "보유주식과 NAV 후보 날짜별 파일의 존재·동일날짜 비교 가능 여부·수집 예정시각 전후·기간 공백을 점검합니다. API 호출 없이 저장소를 읽으며 과거 데이터를 현재 평가액으로 소급 채우지 않습니다.",
     {},async()=>{try{return ok(await captureIntegrityReport());}catch(e){return fail(e);}});
