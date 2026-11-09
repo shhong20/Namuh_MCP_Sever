@@ -10,10 +10,15 @@ import {navAnomalyReport} from "./nav-anomaly.js";
 import {captureIntegrityReport} from "./capture-integrity.js";
 import {dailyCaptureGate} from "./daily-capture-gate.js";
 import {recoveryReadiness} from "./capture-recovery.js";
+import {captureOpsReport} from "./capture-ops.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_capture_ops_report",
+    "systemd user journal의 자동 기록·검증 로그에서 관측 실행 성공률, 오류 유형, 지연, 조회 페이지/호출 수를 요약합니다. 실행된 로그만 집계하고 일정 대비 성공률은 추정하지 않습니다. 증권사 API·주문·메일 호출 없음.",
+    {days:z.number().int().min(1).max(90).default(30).describe("최근 1~90일, 기본 30일")},
+    async({days})=>{try{return ok(captureOpsReport(days));}catch(e){return fail(new Error("운영 로그 조회 불가 — journalctl 접근 또는 저널 제한을 확인하세요."));}});
   server.tool("portfolio_capture_recovery_readiness",
     "기록 누락의 안전한 수동 복구 가능성(당일 일정/불변 파일)을 읽기 전용으로 점검합니다. 복구·증권사 재호출·주문·메일을 자동 실행하지 않고 인증/한도/네트워크 등은 별도 운영 진단이 필요합니다.",
     {},async()=>{try{return ok(await recoveryReadiness());}catch(e){return fail(e);}});
