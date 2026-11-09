@@ -1,6 +1,7 @@
 import type { Config } from "./config.js";
 import { callRest, callRestPage } from "./client.js";
 import { collectBrokerPages } from "./pagination.js";
+import { listNavCandidates } from "./nav-candidate.js";
 import { liveAccount, currentSeoulDate, listSnapshots } from "./history.js";
 
 type Raw = Record<string, any>;
@@ -133,15 +134,18 @@ export async function liveExternalFlowAudit(config:Config,month:string,monthDate
 }
 export async function returnReadiness(){
  const snapshots=await listSnapshots();
+ const navCandidates=await listNavCandidates();
  return {
    stored_holding_snapshots:snapshots.length,
+   stored_broker_nav_candidates:navCandidates.length,
+   last_nav_candidate_date:navCandidates.at(-1)?.date??null,
    first_date:snapshots[0]?.date??null,
    last_date:snapshots[snapshots.length-1]?.date??null,
    verified_cash_inclusive_net_asset_snapshots:0,
    verified_external_flow_periods:0,
    actual_monthly_return_available:false,
    blockers:[
-     "통합 자산 API 연속조회(00218)와 해외주식 포함 중복 제거 검증",
+     "통합 자산 API 연속조회는 지원되지만 NH 순자산 후보의 항목 차이 및 회계 정의에 대한 검증",
      "예수금·미결제·대출이 포함된 계좌 전체 순자산의 일별 확정 저장",
      "국내외 입출금(외부 납입/인출) 전체 내역 및 연속조회 완결성",
      "연속된 기간 기초·기말 평가시점과 외부 현금흐름 금액 대조",
