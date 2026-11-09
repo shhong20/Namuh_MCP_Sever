@@ -12,10 +12,15 @@ import {dailyCaptureGate} from "./daily-capture-gate.js";
 import {recoveryReadiness} from "./capture-recovery.js";
 import {captureOpsReport} from "./capture-ops.js";
 import {scheduleCoverageReport} from "./capture-schedule-coverage.js";
+import {captureInvocationReport} from "./capture-invocations.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_capture_invocation_audit",
+    "systemd user service 실행 ID별 시작·완료 결과와 앱 로그를 연결하고 최신 서비스 종료 코드를 확인합니다. 타이머/수동 실행의 원인은 근거 없이는 구분하지 않으며, 읽기 전용으로 시스템 로그와 현재 단위 상태만 조회합니다.",
+    {days:z.number().int().min(1).max(90).default(30).describe("최근 1~90일")},
+    async({days})=>{try{return ok(captureInvocationReport(days));}catch(e){return fail(new Error("실행 식별자 진단 조회 실패: journalctl/systemctl 접근을 확인하세요."));}});
   server.tool("portfolio_capture_schedule_coverage",
     "KST 일별 예약시각과 실제 시스템 로그 결과를 대조합니다. WSL 부팅 구간의 관측 근거를 분리하고 수동 실행·저널 누락을 고려해 진짜 일정 성공률은 확정하지 않습니다. 조회 전용이며 증권사 API, 주문, 이메일을 호출하지 않습니다.",
     {days:z.number().int().min(1).max(90).default(30).describe("최근 1~90일, 기본 30일")},
