@@ -6,6 +6,7 @@ import type { Config } from "./config.js";
 import { callRestPage } from "./client.js";
 import { collectBrokerPages } from "./pagination.js";
 import { liveAccount, currentSeoulDate } from "./history.js";
+import { diagnoseNavComposition } from "./nav-composition.js";
 
 export type NavCandidate = {
   schema_version: 1;
@@ -21,6 +22,15 @@ export type NavCandidate = {
   reconciliation_status: "DIFFERENCE_REQUIRES_REVIEW" | "ITEM_TOTAL_MATCHES";
   verified_full_nav: false;
   usable_for_investment_return: false;
+  accounting_evidence?: {
+    foreign_cash_krw: number | null;
+    foreign_margin_krw: number | null;
+    foreign_orderable_krw: number | null;
+    foreign_cash_less_margin_and_orderable_krw: number | null;
+    item_delta_less_foreign_margin_krw: number | null;
+    asset_groups_krw: Record<string,{count:number;value_krw:number}>;
+    classification: string;
+  };
 };
 export function navCandidateDir(): string {
   return process.env.NAMUH_NAV_CANDIDATE_DIR ?? join(homedir(),".local","share","namuh-portfolio","nav-candidates");
@@ -59,6 +69,7 @@ export function makeNavCandidate(collected: Awaited<ReturnType<typeof collectBro
     itemTotal+=numberOrFail(row.eal_amt,"Output_1["+i+"].eal_amt");
   }
   const delta=Math.round((itemTotal-assets)*100)/100;
+  const diagnostic=diagnoseNavComposition(summary,collected.data.Output_1,true);
   return {
     schema_version:1,date,captured_at:capturedAt,timezone:"Asia/Seoul",
     reported_net_assets_krw:nas,reported_total_assets_krw:assets,
@@ -71,6 +82,15 @@ export function makeNavCandidate(collected: Awaited<ReturnType<typeof collectBro
     reconciliation_status:Math.abs(delta)>1?"DIFFERENCE_REQUIRES_REVIEW":"ITEM_TOTAL_MATCHES",
     verified_full_nav:false,
     usable_for_investment_return:false,
+    accounting_evidence: {
+      foreign_cash_krw:diagnostic.broker_reported.foreign_cash_krw,
+      foreign_margin_krw:diagnostic.broker_reported.foreign_margin_krw,
+      foreign_orderable_krw:diagnostic.broker_reported.foreign_orderable_krw,
+      foreign_cash_less_margin_and_orderable_krw:diagnostic.comparisons.foreign_cash_minus_margin_and_orderable_krw,
+      item_delta_less_foreign_margin_krw:diagnostic.comparisons.listed_delta_minus_margin_krw,
+      asset_groups_krw:diagnostic.group_values_krw,
+      classification:diagnostic.diagnostic_status
+    },
   };
 }
 export async function listNavCandidates(month?:string):Promise<NavCandidate[]>{

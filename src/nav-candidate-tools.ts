@@ -4,10 +4,15 @@ import type { Config } from "./config.js";
 import { captureNavCandidate, navCandidateHistory } from "./nav-candidate.js";
 import { transferReviewQueue } from "./transfer-queue.js";
 import {liveNavCompositionAudit} from "./nav-composition.js";
+import {navAccountingTrend} from "./nav-accounting-trend.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_nav_accounting_trend",
+    "기록된 NH 순자산 후보의 날짜별 개별항목 합계 차이와 외화담보금액 잔차를 동일일자 기준으로 대조합니다. 기존 상세 기록이 없는 일자는 결측으로 표시하며, 수익률·회계공식은 확정하지 않습니다. 증권사 API를 호출하지 않습니다.",
+    {month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().describe("조회 월 YYYY-MM (생략하면 전체)")},
+    async({month})=>{try{return ok(await navAccountingTrend(month));}catch(e){return fail(e);}});
   server.tool("portfolio_nav_composition_audit",
     "NH 통합 자산 원본의 항목별 그룹 합계와 외화예수금·증거금·주문가능액을 비교하고 금액 차이의 근접성만 진단합니다. 회계 규칙 미확정 시 순자산을 보정하지 않으며 실거래 없음.",
     {},async()=>{try{return ok(await liveNavCompositionAudit(config));}catch(e){return fail(e);}});
