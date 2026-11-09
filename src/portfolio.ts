@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Config } from "./config.js";
 import { callRest } from "./client.js";
+import { analyzeRecentUsFills } from "./recent-buys.js";
 
 type JsonObject = Record<string, any>;
 
@@ -200,6 +201,45 @@ export function registerPortfolioTools(server:McpServer, config:Config):void {
           warning:"요청한 주문일 조회 결과이며 전체 기간 체결 이력을 의미하지 않습니다."
         })}]};
       }catch(e){return {content:[{type:"text" as const,text:"국내 주문 조회 실패: "+String(e instanceof Error?e.message:e)}],isError:true};}
+    });
+
+  server.tool("portfolio_recent_us_buys",
+    "미국주식 최근 1~7일 실제 매수 체결분과 현재 보유 평가단가를 비교합니다. 취소주문은 제외하고 과거 개별 매수 lot의 확정 손익으로 오인하지 않도록 명시합니다. 조회전용.",
+    {start_date:z.string().regex(/^\d{8}$/),end_date:z.string().regex(/^\d{8}$/)},
+    async ({start_date,end_date})=>{
+      try {
+        const parseDate=(s:string)=>{
+          const v=new Date(s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8)+"T00:00:00Z");
+          if (!Number.isFinite(v.getTime())||v.toISOString().slice(0,10).replace(/-/g,"")!==s)throw new Error("Invalid date");
+          return v;
+        };
+        const begin=parseDate(start_date),end=parseDate(end_date);
+        const days=Math.round((end.getTime()-begin.getTime())/86400000)+1;
+        if (days<1||days>7)throw new Error("Date range must be 1–7 days");
+        const account=await liveAccount();
+        const allOrders:ReturnType<typeof normalizeOrders>=[];
+        const dates:string[]=[];
+        for(let n=0;n<days;n++) {
+          const d=new Date(begin.getTime()+86400000*n).toISOString().slice(0,10).replace(/-/g,"");
+          const response=await callRest(config,"/gbstock/inquiry/v1/unexecuted",{
+            orr_dt:d,act_no:account,oss_sby_dit_cd:"0",sot_dit:"1",ost_cns_dit:"0"
+          });
+          if(!["00166","13578"].includes(response.rsp_cd))throw new Error("US order source incomplete");
+          allOrders.push(...normalizeOrders(response));dates.push(d);
+        }
+        const us=await callRest(config,"/gbstock/inquiry/v1/balance",{
+          act_no:account,qut_iqr_dit_cd:"9",fc_sec_trd_nat_cd:"200",cur_cd:"KRW",xns_dit_cd:"1"
+        });
+        if(!["00166","13578"].includes(us.rsp_cd))throw new Error("US holdings source incomplete");
+        if (!Array.isArray(us.Output_1)) throw new Error("US holdings rows missing");
+        const positions=us.Output_1.map((p:JsonObject)=>({
+          symbol:String(p.iem_cd??""),name:String(p.iem_nm??""),quantity:numberOf(p.cns_bse_bnc_qty),
+          market_value_usd:numberOf(p.fc_eal_amt),market_value_krw:numberOf(p.krw_eal_amt),
+          valuation_fx_krw_per_usd:numberOf(p.tdt_sby_bse_xcg_rt),
+        }));
+        const result=analyzeRecentUsFills(allOrders,positions,dates,true);
+        return {content:[{type:"text" as const,text:JSON.stringify(result)}]};
+      }catch(e){return {content:[{type:"text" as const,text:"최근 해외주식 매수 분석 실패: "+String(e instanceof Error?e.message:e)}],isError:true};}
     });
 
   server.tool("portfolio_savings_plan",
