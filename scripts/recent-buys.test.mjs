@@ -34,3 +34,11 @@ test('sold or transferred holdings are not asserted as per-lot gains',()=>{
 test('duplicate positions are rejected',()=>{
   assert.equal(analyzeRecentUsFills(orders,[...positions,positions[0]],['20261105'],true).ok,false);
 });
+
+test('multiple fills exceeding current holdings cannot both claim lot PnL',()=>{
+  const two=[orders[0],{...orders[0],order_no:9,filled_quantity:4}];
+  const r=analyzeRecentUsFills(two,positions,['20261105'],true);
+  assert.equal(r.filled_recent_buys.length,2);
+  assert.equal(r.filled_recent_buys[0].estimate_quality,'NOT_VERIFIABLE');
+  assert.equal(r.filled_recent_buys[1].indicative_purchase_to_valuation_change_usd,null);
+});
