@@ -121,25 +121,35 @@ export async function liveAccount(config:Config):Promise<string>{
   if(live.length!==1||!live[0].acct_no)throw new Error("실계좌 1개를 식별할 수 없습니다");
   return live[0].acct_no;
 }
-export async function captureDaily(config:Config):Promise<{created:boolean;date:string;holdings_value_krw:number}>{
-  const date=currentSeoulDate();
-  // Do not call broker at all if this date is already captured.
-  if((await listSnapshots()).some(s=>s.date===date)){
-    const old=(await listSnapshots()).find(s=>s.date===date)!;
-    return {created:false,date,holdings_value_krw:old.holdings_value_krw};
-  }
-  const account=await liveAccount(config);
-  const domestic=await callRest(config,"/krstock/inquiry/v1/balance",{
-    act_no:account,bnc_bse_cd:"5",ltg_aot_dit_cd:"9",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
-  });
-  const overseas=await callRest(config,"/gbstock/inquiry/v1/balance",{
-    act_no:account,qut_iqr_dit_cd:"9",fc_sec_trd_nat_cd:"200",cur_cd:"KRW",xns_dit_cd:"1"
-  });
+export type HoldingsCaptureSource={
+  account:()=>Promise<string>;
+  domestic:(account:string)=>Promise<any>;
+  overseas:(account:string)=>Promise<any>;
+};
+export async function captureDailyWithSources(sources:HoldingsCaptureSource,date=currentSeoulDate()):
+Promise<{created:boolean;date:string;holdings_value_krw:number}>{
+  // A source can fail, but neither failure nor retry may overwrite a prior capture.
+  const existing=(await listSnapshots()).find(s=>s.date===date);
+  if(existing)return {created:false,date,holdings_value_krw:existing.holdings_value_krw};
+  const account=await sources.account();
+  const domestic=await sources.domestic(account);
+  const overseas=await sources.overseas(account);
   if(!["00166","13578"].includes(domestic.rsp_cd)||!["00166","13578"].includes(overseas.rsp_cd))
     throw new Error("잔고 API 업무 상태 불확실 — 스냅샷 저장하지 않음");
   const s=createSnapshot(summarizeBalances(domestic,overseas),date);
   const result=await saveSnapshot(s);
   return {...result,holdings_value_krw:s.holdings_value_krw};
+}
+export async function captureDaily(config:Config):Promise<{created:boolean;date:string;holdings_value_krw:number}>{
+  return captureDailyWithSources({
+    account:()=>liveAccount(config),
+    domestic:(act_no)=>callRest(config,"/krstock/inquiry/v1/balance",{
+      act_no,bnc_bse_cd:"5",ltg_aot_dit_cd:"9",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
+    }),
+    overseas:(act_no)=>callRest(config,"/gbstock/inquiry/v1/balance",{
+      act_no,qut_iqr_dit_cd:"9",fc_sec_trd_nat_cd:"200",cur_cd:"KRW",xns_dit_cd:"1"
+    }),
+  });
 }
 export function monthDates(month:string):{start:string;end:string}{
   assertMonth(month);

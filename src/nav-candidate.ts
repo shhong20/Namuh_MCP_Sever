@@ -138,20 +138,29 @@ export async function saveNavCandidate(candidate:NavCandidate){
     throw e;
   }finally{await rm(tmp,{force:true});}
 }
-export async function captureNavCandidate(config:Config) {
-  const today=currentSeoulDate();
+export type NavCaptureSource={
+  account:()=>Promise<string>;
+  page:(act_no:string,cts?:string,flag?:string)=>ReturnType<typeof callRestPage>;
+};
+export async function captureNavWithSources(source:NavCaptureSource,today=currentSeoulDate()) {
   const previous=(await listNavCandidates()).find(x=>x.date===today);
   if(previous)return {created:false,candidate:previous,broker_calls:0};
-  const act_no=await liveAccount(config);
-  const data=await collectBrokerPages((cts,flag)=>callRestPage(config,
-    "/krstock/inquiry/v1/assetStatus",{
-      act_no,eal_aly_cd:"2",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
-    },cts,flag),12);
+  const act_no=await source.account();
+  const data=await collectBrokerPages((cts,flag)=>source.page(act_no,cts,flag),12);
   if(!data.audit.complete)
     throw new Error("연속조회 불완전: "+String(data.audit.failure_reason));
   const candidate=makeNavCandidate(data,today);
   const saved=await saveNavCandidate(candidate);
   return {...saved,candidate,broker_calls:data.audit.page_count+1};
+}
+export async function captureNavCandidate(config:Config) {
+  return captureNavWithSources({
+    account:()=>liveAccount(config),
+    page:(act_no,cts,flag)=>callRestPage(config,
+      "/krstock/inquiry/v1/assetStatus",{
+        act_no,eal_aly_cd:"2",aet_bse:"1",qut_dit_cd:"UNT",aly_qut_cd:"2"
+      },cts,flag)
+  });
 }
 export async function navCandidateHistory(month?:string){
   const records=await listNavCandidates(month);
