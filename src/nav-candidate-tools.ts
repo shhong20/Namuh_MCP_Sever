@@ -5,10 +5,26 @@ import { captureNavCandidate, navCandidateHistory } from "./nav-candidate.js";
 import { transferReviewQueue } from "./transfer-queue.js";
 import {liveNavCompositionAudit} from "./nav-composition.js";
 import {navAccountingTrend} from "./nav-accounting-trend.js";
+import {liveEvidenceCheck} from "./evidence-check.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_transfer_evidence_check",
+    "이체입금/출금 후보를 별도 은행·증권사 증빙의 날짜·금액·통화·이체 방향과 비교합니다. 개인정보 입력 없이 메타데이터만 받으며 증거 원본을 직접 확인하지 못하면 외부 납입 확정·수익률 자동 계산은 하지 않습니다.",
+    {
+      month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+      case_id:z.string().regex(/^[0-9a-f]{16}$/),
+      evidence_kind:z.enum(["bank_statement","broker_statement","personal_note"]),
+      external_record_date:z.string().regex(/^\d{8}$/),
+      external_record_amount:z.number().positive().finite(),
+      external_record_currency:z.enum(["KRW","USD","JPY","EUR","OTHER","UNKNOWN"]),
+      origin_account_relation:z.enum(["own_external_cash_account","own_investment_account","third_party","unknown"]),
+      source_movement_direction:z.enum(["out","in","unknown"]),
+      independently_reviewed:z.boolean()
+    },
+    async({month,...e})=>{try{return ok(await liveEvidenceCheck(config,month,e));}catch(err){return fail(err);}});
+
   server.tool("portfolio_nav_accounting_trend",
     "기록된 NH 순자산 후보의 날짜별 개별항목 합계 차이와 외화담보금액 잔차를 동일일자 기준으로 대조합니다. 기존 상세 기록이 없는 일자는 결측으로 표시하며, 수익률·회계공식은 확정하지 않습니다. 증권사 API를 호출하지 않습니다.",
     {month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().describe("조회 월 YYYY-MM (생략하면 전체)")},
