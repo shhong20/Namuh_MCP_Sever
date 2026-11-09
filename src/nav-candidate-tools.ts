@@ -6,10 +6,15 @@ import { transferReviewQueue } from "./transfer-queue.js";
 import {liveNavCompositionAudit} from "./nav-composition.js";
 import {navAccountingTrend} from "./nav-accounting-trend.js";
 import {liveEvidenceCheck} from "./evidence-check.js";
+import {navAnomalyReport} from "./nav-anomaly.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_nav_anomaly_report",
+    "기존 NAV 후보·보유증권 스냅샷을 조회하여 수집 누락, 항목합계 불일치, 담보 잔차, 연속 날짜 간 큰 변화를 감지합니다. 외부 API 호출·주문·알림 발송 없이 읽기 전용. 후보 평가액 변화는 투자수익률이 아닙니다.",
+    {month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().describe("조회 월 YYYY-MM (미입력 전체)")},
+    async({month})=>{try{return ok(await navAnomalyReport(month));}catch(e){return fail(e);}});
   server.tool("portfolio_transfer_evidence_check",
     "이체입금/출금 후보를 별도 은행·증권사 증빙의 날짜·금액·통화·이체 방향과 비교합니다. 개인정보 입력 없이 메타데이터만 받으며 증거 원본을 직접 확인하지 못하면 외부 납입 확정·수익률 자동 계산은 하지 않습니다.",
     {
