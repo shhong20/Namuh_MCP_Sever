@@ -20,7 +20,7 @@ const safeKinds=new Set([
  "STORAGE_PERMISSION_OR_INTEGRITY","UNKNOWN_FAILURE"]);
 type Entry={_SYSTEMD_USER_UNIT?:string;USER_UNIT?:string;_SYSTEMD_INVOCATION_ID?:string;
  USER_INVOCATION_ID?:string;__REALTIME_TIMESTAMP?:string;MESSAGE?:string;SYSLOG_IDENTIFIER?:string;JOB_RESULT?:string};
-type Event={service:Service;decision:Decision;date:string|null;timestamp:string|null;
+export type Event={service:Service;decision:Decision;date:string|null;timestamp:string|null;
  duration_ms:number|null;source_pages:number|null;broker_calls:number|null;
  failure_kind:string|null;created:boolean|null};
 function positiveDuration(v:unknown):number|null{
@@ -29,7 +29,7 @@ function positiveDuration(v:unknown):number|null{
 function nonnegativeInt(v:unknown):number|null{
  return typeof v==="number"&&Number.isInteger(v)&&v>=0&&v<1000?v:null;
 }
-function eventOf(raw:Entry):Event|null{
+export function eventOf(raw:Entry):Event|null{
  const service=units.get(raw._SYSTEMD_USER_UNIT??"");
  if(!service||raw.SYSLOG_IDENTIFIER!=="node"||typeof raw.MESSAGE!=="string"||!raw.MESSAGE.startsWith("{"))return null;
  let d:Record<string,unknown>;

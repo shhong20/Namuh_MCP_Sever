@@ -11,10 +11,15 @@ import {captureIntegrityReport} from "./capture-integrity.js";
 import {dailyCaptureGate} from "./daily-capture-gate.js";
 import {recoveryReadiness} from "./capture-recovery.js";
 import {captureOpsReport} from "./capture-ops.js";
+import {scheduleCoverageReport} from "./capture-schedule-coverage.js";
 
 const ok=(o:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(o)}]});
 const fail=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]});
 export function registerNavCandidateTools(server:McpServer,config:Config):void {
+  server.tool("portfolio_capture_schedule_coverage",
+    "KST 일별 예약시각과 실제 시스템 로그 결과를 대조합니다. WSL 부팅 구간의 관측 근거를 분리하고 수동 실행·저널 누락을 고려해 진짜 일정 성공률은 확정하지 않습니다. 조회 전용이며 증권사 API, 주문, 이메일을 호출하지 않습니다.",
+    {days:z.number().int().min(1).max(90).default(30).describe("최근 1~90일, 기본 30일")},
+    async({days})=>{try{return ok(scheduleCoverageReport(days));}catch(e){return fail(new Error("예약 일정 운영 근거 조회 불가 — systemd 저널 및 부팅 기록을 확인하세요."));}});
   server.tool("portfolio_capture_ops_report",
     "systemd user journal의 자동 기록·검증 로그에서 관측 실행 성공률, 오류 유형, 지연, 조회 페이지/호출 수를 요약합니다. 실행된 로그만 집계하고 일정 대비 성공률은 추정하지 않습니다. 증권사 API·주문·메일 호출 없음.",
     {days:z.number().int().min(1).max(90).default(30).describe("최근 1~90일, 기본 30일")},
