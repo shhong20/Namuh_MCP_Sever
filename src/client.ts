@@ -106,7 +106,7 @@ export async function callRest(
     text = await res.text();
     if (res.ok) break;
     if (attempt === 0 && isInvalidTokenError(res.status, text)) {
-      clearTokenCache();
+      await clearTokenCache(config);
       forceToken = true;
       continue;
     }
