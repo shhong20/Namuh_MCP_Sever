@@ -71,3 +71,9 @@ test("failed or invalid quote never substitutes a price",()=>{
   last_price_krw:4640,quote_code:"00218",quote_timestamp:null});
  assert.equal(y.ok,false);
 });
+
+test("quote response for a different symbol is rejected",()=>{
+ const x=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,last_price_krw:4640,quote_code:"00000",quote_timestamp:null,quote_symbol:"005930"});
+ assert.equal(x.ok,false);
+ assert.equal(x.reason,"QUOTE_SYMBOL_MISMATCH");
+});

@@ -81,12 +81,14 @@ export function summarizeAnnualEvidence(year:number,monthly:MonthAudit[]) {
 }
 export function quoteCrosscheck(p:{
  symbol:string;quantity:number;broker_market_value_krw:number;last_price_krw:unknown;
- quote_code:string;quote_timestamp:string|null
+ quote_code:string;quote_timestamp:string|null;quote_symbol?:unknown
 }) {
  const price=Number(p.last_price_krw);
  if(!/^(?:\d{6}|\d{4}[A-Z]\d)$/.test(p.symbol)||!Number.isSafeInteger(p.quantity)||p.quantity<=0
    ||!Number.isFinite(p.broker_market_value_krw)||p.broker_market_value_krw<0)
    return {ok:false,reason:"INVALID_BROKER_POSITION"};
+ if(p.quote_symbol!==undefined && String(p.quote_symbol)!==p.symbol)
+   return {ok:false,reason:"QUOTE_SYMBOL_MISMATCH",symbol:p.symbol};
  if(p.quote_code!=="00000"||!Number.isFinite(price)||price<=0)
    return {ok:false,reason:"QUOTE_NOT_VERIFIED",symbol:p.symbol};
  return {
