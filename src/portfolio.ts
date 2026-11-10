@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Config } from "./config.js";
 import { callRest } from "./client.js";
 import { analyzeRecentUsFills } from "./recent-buys.js";
+import { inspectPositionIntegrity } from "./portfolio-integrity.js";
 
 type JsonObject = Record<string, any>;
 
@@ -75,7 +76,7 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
     us_securities_krw:foreignValue, position_unrealized_pnl_krw:pnl,
     account_reported_unrealized_pnl_krw:pnlByAccount,
     account_reported_values_not_added_to_positions:true,
-    positions, weights:concentration,
+    positions, weights:concentration, data_quality:inspectPositionIntegrity(positions),
     risk: {
       largest_position:concentration[0]??null,
       top_3_weight_pct:concentration.slice(0,3).reduce((s,p)=>s+p.weight_pct,0),
