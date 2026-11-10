@@ -63,3 +63,18 @@ console.log(JSON.stringify({a,b,calls}));
   assert.deepEqual(run(home,script),{a:"token-1",b:"token-2",calls:2});
  }finally{rmSync(home,{recursive:true,force:true})}
 });
+
+test("revoking a different auth scope does not discard current scope's memory token",()=>{
+ const home=mkdtempSync(join(tmpdir(),"nh-token-isolation-"));
+ try {
+  const script=`import {getAccessToken,clearTokenCache} from './dist/auth.js';
+const c=${JSON.stringify(config)};let calls=0;
+globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({access_token:'token-'+calls,expires_in:7200}),{status:200})};
+const other={...c,appKey:'other'};
+await getAccessToken(other);const main=await getAccessToken(c);
+await clearTokenCache(other);const after=await getAccessToken(c);
+console.log(JSON.stringify({main,after,calls}));
+`;
+  assert.deepEqual(run(home,script),{main:"token-2",after:"token-2",calls:2});
+ }finally{rmSync(home,{recursive:true,force:true})}
+});
