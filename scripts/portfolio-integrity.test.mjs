@@ -10,6 +10,9 @@ test("positive holdings with zero market value emit review-required alert",()=>{
  assert.equal(d.data_quality.alerts[0].code,"POSITIVE_QUANTITY_ZERO_VALUATION");
  assert.equal(d.data_quality.valuation_totals_verified,false);
  assert.equal(d.positions[0].market_value_krw,0);
+ assert.equal(d.data_quality.position_weights_reliable,false);
+ assert.equal(d.data_quality.risk_percentages_reliable,false);
+ assert.equal(d.risk.percentages_verified,false);
 });
 test("negative numbers, duplicate symbols and nonzero value zero shares are flagged",()=>{
  const rows=[
