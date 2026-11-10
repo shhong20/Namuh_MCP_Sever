@@ -104,7 +104,8 @@ export async function getAccessToken(c:Config,force=false):Promise<string>{
 }
 export async function clearTokenCache(config?:Config):Promise<void>{
  const scope=config?scopeOf(config):cached?.scope;
- cached=null;
+ // A revoked token for a different app must not discard this app's healthy cache.
+ if(cached?.scope===scope)cached=null;
  if(scope)await clearDisk(scope);
 }
 export function tokenCacheStatus(c:Config){
