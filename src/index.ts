@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { registerTools } from "./tools.js";
 import { registerPortfolioTools } from "./portfolio.js";
+import { registerTaxSafetyTools } from "./tax-safety-tools.js";
 import { registerHistoryTools } from "./history-tools.js";
 import { registerPerformanceTools } from "./performance-tools.js";
 import { registerReconciliationTools } from "./reconciliation-tools.js";
@@ -20,6 +21,7 @@ async function main() {
 
   registerTools(server, config);
   registerPortfolioTools(server, config);
+  registerTaxSafetyTools(server, config);
   registerHistoryTools(server, config);
   registerPerformanceTools(server, config);
   registerReconciliationTools(server, config);
