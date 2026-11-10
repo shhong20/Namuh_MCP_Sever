@@ -69,6 +69,8 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
     residual_krw:s.residual_krw+x.residual_krw,
     reported_pnl_krw:s.reported_pnl_krw+x.reported_pnl_krw,
   }),{stock_effect_krw:0,fx_effect_krw:0,residual_krw:0,reported_pnl_krw:0});
+  const integrity=inspectPositionIntegrity(positions);
+  const weightsReliable=integrity.alert_count===0 && totalValue>0;
   return {
     currency:"KRW", scope:"domestic_KR_and_overseas_US_securities_only",
     warning:"포지션 평가액 합계이며 예수금/미결제금액/대출/다른 국가 자산은 포함하지 않습니다. 전체 순자산과 다릅니다.",
@@ -76,8 +78,12 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
     us_securities_krw:foreignValue, position_unrealized_pnl_krw:pnl,
     account_reported_unrealized_pnl_krw:pnlByAccount,
     account_reported_values_not_added_to_positions:true,
-    positions, weights:concentration, data_quality:inspectPositionIntegrity(positions),
+    positions, weights:concentration, data_quality:{...integrity,
+      position_weights_reliable:weightsReliable,
+      risk_percentages_reliable:weightsReliable,
+      percentage_warning:weightsReliable?null:"종목 평가액 이상 또는 평가액 합계 0원이 있어 비중·집중도·레버리지 위험 비율은 검증되지 않은 참고치입니다."},
     risk: {
+      percentages_verified:weightsReliable,
       largest_position:concentration[0]??null,
       top_3_weight_pct:concentration.slice(0,3).reduce((s,p)=>s+p.weight_pct,0),
       semiconductor_exposure_pct:totalValue>0?Math.round(semiconductorValue/totalValue*10000)/100:0,
