@@ -58,7 +58,7 @@ export function registerBrokerAuditTools(server:McpServer,config:Config):void{
       const q=data.Output_0||{};
       audited.push(quoteCrosscheck({
         symbol:String(row.iem_cd??""),quantity:Number(row.itg_bnc_qty),
-        broker_market_value_krw:Number(row.eal_amt),last_price_krw:q.stck_prpr,
+        broker_market_value_krw:Number(row.eal_amt),broker_reported_price_krw:row.now_pr,last_price_krw:q.stck_prpr,
         quote_code:String(data.rsp_cd),quote_symbol:q.iem_cd,
         quote_timestamp:typeof q.hoga_bsop_hour==="string"?q.hoga_bsop_hour:null
       }));

@@ -81,21 +81,27 @@ export function summarizeAnnualEvidence(year:number,monthly:MonthAudit[]) {
 }
 export function quoteCrosscheck(p:{
  symbol:string;quantity:number;broker_market_value_krw:number;last_price_krw:unknown;
- quote_code:string;quote_timestamp:string|null;quote_symbol?:unknown
+ quote_code:string;quote_timestamp:string|null;quote_symbol?:unknown;broker_reported_price_krw?:unknown
 }) {
  const price=Number(p.last_price_krw);
  if(!/^(?:\d{6}|\d{4}[A-Z]\d)$/.test(p.symbol)||!Number.isSafeInteger(p.quantity)||p.quantity<=0
    ||!Number.isFinite(p.broker_market_value_krw)||p.broker_market_value_krw<0)
    return {ok:false,reason:"INVALID_BROKER_POSITION"};
- if(p.quote_symbol!==undefined && String(p.quote_symbol)!==p.symbol)
+ if(typeof p.quote_symbol!=="string" || p.quote_symbol!==p.symbol)
    return {ok:false,reason:"QUOTE_SYMBOL_MISMATCH",symbol:p.symbol};
  if(p.quote_code!=="00000"||!Number.isFinite(price)||price<=0)
    return {ok:false,reason:"QUOTE_NOT_VERIFIED",symbol:p.symbol};
+ const brokerPrice=p.broker_reported_price_krw===null||p.broker_reported_price_krw===undefined||p.broker_reported_price_krw===""?null:Number(p.broker_reported_price_krw);
+ const validBrokerPrice=brokerPrice!==null && Number.isFinite(brokerPrice) && brokerPrice>0;
  return {
    ok:true,symbol:p.symbol,quantity:p.quantity,broker_market_value_krw:p.broker_market_value_krw,
+   broker_reported_price_krw:validBrokerPrice?brokerPrice:null,
+   indicative_from_broker_reported_price_krw:validBrokerPrice?Math.round(brokerPrice*p.quantity):null,
+   broker_price_present_while_valuation_zero:validBrokerPrice&&p.broker_market_value_krw===0,
    observed_quote_krw:price,
    indicative_market_value_krw:Math.round(price*p.quantity),
    quote_timestamp:p.quote_timestamp,
+   quote_matches_broker_price:validBrokerPrice?brokerPrice===price:null,
    valuation_mismatch:p.broker_market_value_krw!==Math.round(price*p.quantity),
    is_separate_price_not_broker_valuation:true,
    broker_market_value_replaced:false,
