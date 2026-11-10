@@ -56,24 +56,33 @@ test("max pages and unknown response fail closed",async()=>{
 });
 test("zero broker valuation quote is indicative only",()=>{
  const o=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,
-  last_price_krw:4640,quote_code:"00000",quote_timestamp:"09:39:46"});
+  last_price_krw:4640,quote_code:"00000",quote_timestamp:"09:39:46",quote_symbol:"0193T0",broker_reported_price_krw:4470});
  assert.equal(o.ok,true);
  assert.equal(o.indicative_market_value_krw,176320);
+ assert.equal(o.indicative_from_broker_reported_price_krw,169860);
+ assert.equal(o.broker_price_present_while_valuation_zero,true);
+ assert.equal(o.quote_matches_broker_price,false);
  assert.equal(o.broker_market_value_replaced,false);
  assert.equal(o.buy_or_sell_trigger,false);
  assert.equal(o.valuation_mismatch,true);
 });
 test("failed or invalid quote never substitutes a price",()=>{
  const x=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,
-  last_price_krw:0,quote_code:"00000",quote_timestamp:null});
+  last_price_krw:0,quote_code:"00000",quote_timestamp:null,quote_symbol:"0193T0"});
  assert.equal(x.ok,false);
  const y=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,
-  last_price_krw:4640,quote_code:"00218",quote_timestamp:null});
+  last_price_krw:4640,quote_code:"00218",quote_timestamp:null,quote_symbol:"0193T0"});
  assert.equal(y.ok,false);
 });
 
 test("quote response for a different symbol is rejected",()=>{
  const x=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,last_price_krw:4640,quote_code:"00000",quote_timestamp:null,quote_symbol:"005930"});
+ assert.equal(x.ok,false);
+ assert.equal(x.reason,"QUOTE_SYMBOL_MISMATCH");
+});
+
+test("missing quote identity fails closed even with positive price",()=>{
+ const x=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,last_price_krw:4640,quote_code:"00000",quote_timestamp:null});
  assert.equal(x.ok,false);
  assert.equal(x.reason,"QUOTE_SYMBOL_MISMATCH");
 });
