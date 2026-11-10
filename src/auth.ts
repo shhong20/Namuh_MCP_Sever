@@ -1,81 +1,113 @@
-import type { Config } from "./config.js";
+import type {Config} from "./config.js";
+import {createHash,randomBytes} from "node:crypto";
+import {mkdir,lstat,readFile,open,rename,unlink} from "node:fs/promises";
+import {homedir} from "node:os";
+import {join} from "node:path";
 
-interface TokenState {
-  token: string;
-  // epoch(ms) 이후에는 만료로 간주하고 재발급
-  expiresAt: number;
+type TokenState={scope:string;token:string;expiresAt:number};
+let cached:TokenState|null=null;
+const inflight=new Map<string,Promise<string>>();
+const SKEW=60_000;
+const dir=()=>join(homedir(),".local","state","namuh-mcp");
+const scopeOf=(c:Config)=>createHash("sha256").update(JSON.stringify([c.authUrl,c.baseUrl,c.appKey,c.appSecret])).digest("hex").slice(0,32);
+const fileOf=(scope:string)=>join(dir(),"token-"+scope+".json");
+
+async function protectedDir(){
+ await mkdir(dir(),{recursive:true,mode:0o700});
+ const st=await lstat(dir());
+ if(!st.isDirectory()||st.isSymbolicLink()||(st.mode&0o077)!==0)
+  throw new Error("NH_CACHE_DIR_PERMISSIONS_INVALID");
 }
-
-let cached: TokenState | null = null;
-
-/**
- * 접근 토큰 발급. NH Open API 규약:
- *   POST {BASE_URL}/oauth2/token
- *   query: appkey, appsecretkey, grant_type=client_credentials, scope=oob
- *   content-type: application/x-www-form-urlencoded
- *   → { access_token, expires_in?, ... }
- * 발급된 토큰은 만료 전까지 메모리에 캐시합니다.
- */
-export async function getAccessToken(config: Config, force = false): Promise<string> {
-  const now = Date.now();
-  if (!force && cached && cached.expiresAt > now + 30_000) {
-    return cached.token;
-  }
-
-  const url = new URL(`${config.authUrl}/oauth2/token`);
-  url.searchParams.set("appkey", config.appKey);
-  url.searchParams.set("appsecretkey", config.appSecret);
-  url.searchParams.set("grant_type", "client_credentials");
-  url.searchParams.set("scope", "oob");
-
-  let lastErr = "";
-  // 토큰 발급 일시장애(IGW40054 등)에는 짧게 재시도. 유효하지 않은 AppKey(IGW40031)는 즉시 중단.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    let res: Response;
-    try {
-      res = await fetch(url.toString(), {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-      });
-    } catch (e) {
-      lastErr = `네트워크 오류 — ${String(e)}`;
-      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-      continue;
-    }
-
-    const text = await res.text();
-    if (res.ok) {
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(`토큰 응답이 JSON 이 아닙니다: ${text.slice(0, 300)}`);
-      }
-      const token: string | undefined = data.access_token ?? data.accessToken;
-      if (!token) {
-        throw new Error(`토큰 응답에 access_token 이 없습니다: ${text.slice(0, 300)}`);
-      }
-      // expires_in(초)이 오면 사용, 없으면 24h. 무효 응답 시 client 의 자동 재발급이 안전망.
-      const expiresInSec = Number(data.expires_in ?? data.expiresIn ?? 86400);
-      cached = {
-        token,
-        expiresAt: now + (Number.isFinite(expiresInSec) ? expiresInSec : 86400) * 1000,
-      };
-      return token;
-    }
-
-    lastErr = `HTTP ${res.status} — ${text.slice(0, 300)}`;
-    // 일시장애면 재시도, 그 외(키 오류 등)는 즉시 실패
-    if (text.includes("IGW40054") && attempt < 2) {
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-      continue;
-    }
-    throw new Error(`토큰 발급 실패 (인증서버 ${config.authUrl}, 운영 전용): ${lastErr}`);
-  }
-  throw new Error(`토큰 발급 실패 (재시도 후에도): ${lastErr}`);
+async function protectedFile(path:string){
+ try {
+  const st=await lstat(path);
+  if(!st.isFile()||st.isSymbolicLink()||(st.mode&0o077)!==0)
+   throw new Error("NH_CACHE_FILE_PERMISSIONS_INVALID");
+  return true;
+ }catch(e:any){if(e?.code==="ENOENT")return false;throw e;}
 }
-
-/** 테스트/디버그용: 토큰 캐시 강제 초기화 */
-export function clearTokenCache(): void {
-  cached = null;
+async function load(scope:string):Promise<TokenState|null>{
+ await protectedDir();
+ const path=fileOf(scope);
+ if(!await protectedFile(path))return null;
+ let data:any;
+ try{data=JSON.parse(await readFile(path,"utf8"));}catch{return null;}
+ if(data?.scope!==scope||typeof data?.token!=="string"||!data.token
+  ||!Number.isFinite(data.expiresAt)||data.expiresAt<=Date.now()+SKEW)return null;
+ return {scope,token:data.token,expiresAt:data.expiresAt};
+}
+async function save(state:TokenState){
+ await protectedDir();
+ const dest=fileOf(state.scope);
+ await protectedFile(dest);
+ const tmp=dest+".tmp-"+process.pid+"-"+randomBytes(6).toString("hex");
+ const handle=await open(tmp,"wx",0o600);
+ try{
+  await handle.writeFile(JSON.stringify(state));
+  await handle.sync();
+  await handle.close();
+  await rename(tmp,dest);
+ }finally{
+  await handle.close().catch(()=>{});
+  await unlink(tmp).catch(()=>{});
+ }
+}
+async function clearDisk(scope:string){
+ await protectedDir();
+ const path=fileOf(scope);
+ if(await protectedFile(path))await unlink(path);
+}
+async function issue(c:Config,scope:string){
+ const url=new URL(c.authUrl+"/oauth2/token");
+ url.searchParams.set("appkey",c.appKey);
+ url.searchParams.set("appsecretkey",c.appSecret);
+ url.searchParams.set("grant_type","client_credentials");
+ url.searchParams.set("scope","oob");
+ let last="NH_TOKEN_REQUEST_FAILED";
+ for(let attempt=0;attempt<3;attempt++){
+  let response:Response;
+  try{response=await fetch(url,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"}});}
+  catch{last="NH_TOKEN_NETWORK_ERROR";if(attempt<2)await new Promise(r=>setTimeout(r,300*(attempt+1)));continue;}
+  if(response.ok){
+   let data:any;
+   try{data=await response.json();}catch{throw new Error("NH_TOKEN_INVALID_JSON");}
+   const token=data?.access_token??data?.accessToken;
+   if(typeof token!=="string"||!token)throw new Error("NH_TOKEN_MISSING");
+   const ttl=Number(data?.expires_in??data?.expiresIn??86400);
+   if(!Number.isFinite(ttl)||ttl<=0)throw new Error("NH_TOKEN_INVALID_TTL");
+   const state={scope,token,expiresAt:Date.now()+Math.min(ttl,86400)*1000};
+   await save(state);
+   cached=state;
+   return token;
+  }
+  let code="";
+  try{const d:any=await response.json();code=String(d?.error_code??d?.rsp_cd??"");}catch{}
+  // Deliberately no URL, body or credential in this error.
+  last="NH_TOKEN_HTTP_"+response.status+(code?"_"+code:"");
+  if(code==="IGW40054"&&attempt<2){await new Promise(r=>setTimeout(r,400*(attempt+1)));continue;}
+  throw new Error(last);
+ }
+ throw new Error(last);
+}
+export async function getAccessToken(c:Config,force=false):Promise<string>{
+ const scope=scopeOf(c);
+ if(!force&&cached?.scope===scope&&cached.expiresAt>Date.now()+SKEW)return cached.token;
+ const current=inflight.get(scope);
+ if(current)return current;
+ const task=(async()=>{
+  if(force){cached=null;await clearDisk(scope);}
+  else{const saved=await load(scope);if(saved){cached=saved;return saved.token;}}
+  return issue(c,scope);
+ })();
+ inflight.set(scope,task);
+ try{return await task;}finally{if(inflight.get(scope)===task)inflight.delete(scope);}
+}
+export async function clearTokenCache(config?:Config):Promise<void>{
+ const scope=config?scopeOf(config):cached?.scope;
+ cached=null;
+ if(scope)await clearDisk(scope);
+}
+export function tokenCacheStatus(c:Config){
+ return {memory_valid:cached?.scope===scopeOf(c)&&cached.expiresAt>Date.now()+SKEW,
+         disk_cache_enabled:true,request_in_flight:inflight.has(scopeOf(c))};
 }
