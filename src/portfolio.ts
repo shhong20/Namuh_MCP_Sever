@@ -21,6 +21,8 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
       quantity: numberOf(r.itg_bnc_qty), market_value_krw: numberOf(r.eal_amt),
       unrealized_pnl_krw: numberOf(r.eal_pls_amt), return_pct: numberOf(r.pft_rt),
       valuation_currency: "KRW",
+      remaining_quantity:r.rsdl_qty==null||r.rsdl_qty===""?null:numberOf(r.rsdl_qty),
+      unsettled_quantity:r.ny_stl_qty==null||r.ny_stl_qty===""?null:numberOf(r.ny_stl_qty),
     })),
     ...foreign.map((r: JsonObject) => ({
       market: "US", symbol: String(r.iem_cd ?? ""), name: String(r.iem_nm ?? ""),
@@ -34,19 +36,22 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
       valuation_fx_krw_per_usd: numberOf(r.tdt_sby_bse_xcg_rt),
     })),
   ];
-  const posVal = (market: string) => positions.filter(p => p.market === market).reduce((s, p) => s + p.market_value_krw, 0);
+  const integrity=inspectPositionIntegrity(positions);
+  const pendingKeys=new Set(integrity.settlement_pending.map(p=>p.market+":"+p.symbol));
+  const activePositions=positions.filter(p=>!pendingKeys.has(p.market+":"+p.symbol));
+  const posVal = (market: string) => activePositions.filter(p => p.market === market).reduce((s, p) => s + p.market_value_krw, 0);
   const totalValue = posVal("KR") + posVal("US");
   const domesticValue = posVal("KR"), foreignValue = posVal("US");
   const pnl = positions.reduce((s, p) => s + p.unrealized_pnl_krw, 0);
   const pnlByAccount = numberOf(domestic.Output_0?.tot_eal_pls) + numberOf(overseas.Output_0?.eal_pls_sum_amt);
-  const concentration = positions.map(p => ({
+  const concentration = activePositions.map(p => ({
     market: p.market, symbol: p.symbol, name: p.name,
     weight_pct: totalValue > 0 ? Math.round(p.market_value_krw / totalValue * 10000) / 100 : 0,
     market_value_krw: p.market_value_krw,
   })).sort((a,b) => b.weight_pct-a.weight_pct);
-  const semiconductor = positions.filter(p => /하이닉스|삼성전자|TSM|TSMC|INTC|인텔|NVIDIA|엔비디아/i.test(p.name+" "+p.symbol));
+  const semiconductor = activePositions.filter(p => /하이닉스|삼성전자|TSM|TSMC|INTC|인텔|NVIDIA|엔비디아/i.test(p.name+" "+p.symbol));
   const semiconductorValue = semiconductor.reduce((s,p)=>s+p.market_value_krw,0);
-  const leveraged = positions.filter(p => /레버리지|2X|3X|SOXL|TQQQ/i.test(p.name+" "+p.symbol));
+  const leveraged = activePositions.filter(p => /레버리지|2X|3X|SOXL|TQQQ/i.test(p.name+" "+p.symbol));
   const leveragedValue = leveraged.reduce((s,p)=>s+p.market_value_krw,0);
   const fx = foreign.map((r: JsonObject) => {
     const usdCost = numberOf(r.fc_abk_amt);
@@ -69,7 +74,6 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
     residual_krw:s.residual_krw+x.residual_krw,
     reported_pnl_krw:s.reported_pnl_krw+x.reported_pnl_krw,
   }),{stock_effect_krw:0,fx_effect_krw:0,residual_krw:0,reported_pnl_krw:0});
-  const integrity=inspectPositionIntegrity(positions);
   const weightsReliable=integrity.alert_count===0 && totalValue>0;
   return {
     currency:"KRW", scope:"domestic_KR_and_overseas_US_securities_only",
@@ -78,7 +82,7 @@ export function summarizeBalances(domestic: JsonObject, overseas: JsonObject) {
     us_securities_krw:foreignValue, position_unrealized_pnl_krw:pnl,
     account_reported_unrealized_pnl_krw:pnlByAccount,
     account_reported_values_not_added_to_positions:true,
-    positions, weights:concentration, data_quality:{...integrity,
+    positions, weights:concentration, settlement_pending_positions:integrity.settlement_pending, data_quality:{...integrity,
       position_weights_reliable:weightsReliable,
       risk_percentages_reliable:weightsReliable,
       percentage_warning:weightsReliable?null:"종목 평가액 이상 또는 평가액 합계 0원이 있어 비중·집중도·레버리지 위험 비율은 검증되지 않은 참고치입니다."},

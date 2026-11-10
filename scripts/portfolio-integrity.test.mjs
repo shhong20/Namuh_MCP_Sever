@@ -29,3 +29,28 @@ test("normal holdings do not claim valuations are independently verified",()=>{
  assert.equal(r.quality_status,"NO_STRUCTURAL_ANOMALY_DETECTED");
  assert.equal(r.valuation_totals_verified,false);
 });
+
+test("fully sold domestic unsettled row is not active exposure",()=>{
+ const d=summarizeBalances(
+ {Output_0:{},Output_1:[
+ {iem_cd:"0193T0",iem_nm:"KODEX 레버리지",itg_bnc_qty:38,rsdl_qty:0,ny_stl_qty:-38,eal_amt:0,eal_pls_amt:0},
+ {iem_cd:"005930",iem_nm:"삼성전자",itg_bnc_qty:2,rsdl_qty:2,ny_stl_qty:0,eal_amt:200000,eal_pls_amt:3000}]},
+ {Output_0:{},Output_1:[]});
+ assert.equal(d.data_quality.alert_count,0);
+ assert.equal(d.data_quality.settlement_pending_count,1);
+ assert.equal(d.data_quality.settlement_pending[0].status,"SELL_SETTLEMENT_PENDING_INFERRED");
+ assert.equal(d.positions.length,2);
+ assert.equal(d.weights.length,1);
+ assert.equal(d.weights[0].symbol,"005930");
+ assert.equal(d.risk.explicit_leveraged_positions.length,0);
+ assert.equal(d.data_quality.position_weights_reliable,true);
+});
+test("partially sold or missing settlement data is still flagged",()=>{
+ const r=inspectPositionIntegrity([
+ {market:"KR",symbol:"AAA",name:"A",quantity:38,remaining_quantity:12,unsettled_quantity:-26,market_value_krw:0,unrealized_pnl_krw:0},
+ {market:"KR",symbol:"BBB",name:"B",quantity:38,market_value_krw:0,unrealized_pnl_krw:0},
+ {market:"KR",symbol:"CCC",name:"C",quantity:38,remaining_quantity:0,unsettled_quantity:-38,market_value_krw:100,unrealized_pnl_krw:0}
+ ]);
+ assert.equal(r.alert_count,2);
+ assert.equal(r.settlement_pending_count,0);
+});
