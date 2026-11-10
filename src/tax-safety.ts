@@ -73,3 +73,13 @@ export function classifyDailyCandle(symbol:string, candles:any[], asOf:string) {
     candle_change_pct:Math.round((close/open-1)*10000)/100
   };
 }
+
+/** NH HTTP 429 or business-level "APP call count exceeded": stop remaining quotes. */
+export function quoteRateLimitReached(responseOrError:unknown):boolean {
+  if(responseOrError && typeof responseOrError==="object") {
+    const x=responseOrError as {rsp_cd?:unknown;rsp_msg?:unknown;detail?:{category?:string;status?:number}};
+    if(x.detail?.category==="rate_limit" || x.detail?.status===429) return true;
+    return /(?:거래건수|호출|요청).*초과|(?:limit|throttl|rate.?limit)/i.test(String(x.rsp_msg??""));
+  }
+  return /(?:거래건수|호출|요청).*초과|(?:limit|throttl|rate.?limit)/i.test(String(responseOrError??""));
+}
