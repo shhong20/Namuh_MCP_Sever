@@ -3,10 +3,16 @@ import { z } from "zod";
 import type { Config } from "./config.js";
 import { callRest } from "./client.js";
 import { captureDaily, listSnapshots, summarizeHistory, monthDates, summarizeDividends, liveAccount } from "./history.js";
+import { dailyValuationReport } from "./daily-valuation.js";
 
 function result(v:unknown){return {content:[{type:"text" as const,text:JSON.stringify(v)}]};}
 function error(e:unknown){return {isError:true,content:[{type:"text" as const,text:String(e instanceof Error?e.message:e)}]};}
 export function registerHistoryTools(server:McpServer,config:Config):void{
+  server.tool("portfolio_daily_valuation_attribution",
+    "저장된 NH 종목별 스냅샷의 수량이 같은 종목에 한하여 관측일 간 평가액 변동을 귀속합니다. 미국 종목에는 환율 영향이 있으며, 현금 포함 순자산·외부 입출금이 미검증되어 실제 투자수익률은 null입니다. 브로커 조회·거래 없음.",
+    {month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional()},
+    async ({month})=>{try{return result(await dailyValuationReport(month));}catch(e){return error(e);}}
+  );
   server.tool("portfolio_capture_snapshot",
     "국내·미국 보유증권의 현재 평가액과 종목별 수량·손익을 개인 WSL의 비공개 파일에 하루 한 번 저장합니다. 중복 일자에는 증권사 API를 호출하지 않고 기존 기록을 유지합니다. 거래/환전 없음.",
     {},async()=>{try{return result(await captureDaily(config));}catch(e){return error(e);}});
