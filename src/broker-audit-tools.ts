@@ -4,6 +4,7 @@ import type {Config} from "./config.js";
 import {callRest,callRestPage} from "./client.js";
 import {liveAccount} from "./history.js";
 import {auditMonthlyBrokerEvidence,summarizeAnnualEvidence,quoteCrosscheck} from "./broker-audit.js";
+import {commonPeriodInput} from "./realized-pnl-common.js";
 
 const ok=(value:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(value)}]});
 const error=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:"Read-only audit failed: "+String(e instanceof Error?e.message:e)}]});
@@ -22,11 +23,10 @@ export function registerBrokerAuditTools(server:McpServer,config:Config):void{
    const account=await liveAccount(config);
    const monthEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10).replaceAll("-","");
    const end=monthEnd>today?today:monthEnd;
-   const body={act_no:account,iqr_dit:"2",sta_orr_dt:start,end_orr_dt:end,
-     fc_sec_trd_nat_cd:"200",trd_cur_cd:"KRW"};
+   const body=commonPeriodInput(account,start,end,"US","USD");
    const audit=await auditMonthlyBrokerEvidence(
      String(year)+"-"+monthText,
-     (cts,flag)=>callRestPage(config,"/gbstock/inquiry/v1/periodPnl",body,cts,flag),
+     (cts,flag)=>callRestPage(config,"/common/inquiry/v1/periodPnl",body,cts,flag),
      8
    );
    return ok({

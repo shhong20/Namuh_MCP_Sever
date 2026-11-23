@@ -7,7 +7,7 @@ const positions=[
  {market:"KR",symbol:"005930",name:"Samsung",quantity:3,market_value_krw:200000,unrealized_pnl_krw:1000}
 ];
 test("unrealized gains never become certified tax allowance",()=>{
- const result=classifyTaxReadiness(positions,{rsp_cd:"13578",Output_0:{fc_rzt_pls_sum:0}},2026);
+ const result=classifyTaxReadiness(positions,{rsp_cd:"13578",Output_1:{fc_rzt_pls_sum:0}},2026);
  assert.equal(result.ok,true);
  assert.equal(result.potential_unrealized_gains_krw,240000);
  assert.equal(result.potential_unrealized_losses_krw,-300000);

@@ -13,8 +13,9 @@ export function auditBrokerPeriodPage(page:BrokerPage, seenRows:Set<string>, cod
   const d=page.data??{};
   const code=String(d.rsp_cd??"");
   codes.push(code);
-  if (!Array.isArray(d.Output_1))return {state:"FAIL",reason:"OUTPUT_ROWS_NOT_ARRAY",rows:0,code};
-  const rows=d.Output_1;
+  if (d.Output_0!=null && !Array.isArray(d.Output_0))return {state:"FAIL",reason:"OUTPUT_ROWS_NOT_ARRAY",rows:0,code};
+  if (code!=="13578" && !Array.isArray(d.Output_0))return {state:"FAIL",reason:"OUTPUT_ROWS_NOT_ARRAY",rows:0,code};
+  const rows:Array<any>=d.Output_0??[];
   for (const row of rows){
     const key=JSON.stringify(row);
     if(seenRows.has(key))return {state:"FAIL",reason:"DUPLICATE_RECORD",rows:rows.length,code};

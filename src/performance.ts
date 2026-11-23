@@ -1,11 +1,10 @@
 import { callRest } from "./client.js";
 import type { Config } from "./config.js";
 import { liveAccount, monthDates, summarizeDividends } from "./history.js";
+import { commonPeriodInput, normalizeCommonPeriod } from "./realized-pnl-common.js";
 
 /** Broker reporting codes are operation-specific. Never treat unknown codes as empty success. */
 const RESPONSES: Record<string, Set<string>> = {
-  domesticRealized: new Set(["00166","11512"]),
-  overseasRealized: new Set(["00166","13578"]),
   foreignTransactions: new Set(["00166","13578"]),
 };
 export function verifyBrokerResponse(data: any, operation:keyof typeof RESPONSES):void {
@@ -17,21 +16,24 @@ function finiteOrNull(v:unknown):number|null {
   const n=Number(v);return Number.isFinite(n)?n:null;
 }
 export function realizedSummary(domestic:any, foreign:any){
-  const krw=finiteOrNull(domestic?.Output_0?.pls_amt_sum);
-  const usd=finiteOrNull(foreign?.Output_0?.fc_rzt_pls_sum);
-  const domesticRecords=(domestic?.Output_1??[]).map((r:any)=>({
-    date:r.sby_dt, buy_krw:finiteOrNull(r.byn_amt), sell_krw:finiteOrNull(r.sll_amt), realized_pnl_krw:finiteOrNull(r.pls_amt),
-  }));
-  const foreignRecords=(foreign?.Output_1??[]).map((r:any)=>({
-    order_date:r.orr_dt, currency:r.trd_cur_cd, buy_quantity:finiteOrNull(r.byn_qty),
-    sell_quantity:finiteOrNull(r.sll_qty), realized_pnl_usd:finiteOrNull(r.fc_rzt_pls),
-  }));
+  const kr=normalizeCommonPeriod(domestic,"KR");
+  const us=normalizeCommonPeriod(foreign,"US");
   return {
-    domestic_realized_krw:krw, foreign_realized_usd:usd,
-    domestic_daily_records:domesticRecords,
-    foreign_daily_records:foreignRecords,
+    domestic_realized_krw:kr.reported_realized,
+    foreign_realized_usd:us.reported_realized,
+    domestic_daily_records:kr.records.map((r:any)=>({
+      date:r.orr_dt,buy_krw:finiteOrNull(r.byn_dcp_cns_amt),
+      sell_krw:finiteOrNull(r.sll_dcp_cns_amt),realized_pnl_krw:finiteOrNull(r.rzt_pls_amt),
+    })),
+    foreign_daily_records:us.records.map((r:any)=>({
+      order_date:r.orr_dt,currency:r.cur_cd,
+      buy_quantity:finiteOrNull(r.byn_dcp_cns_qty),
+      sell_quantity:finiteOrNull(r.sll_dcp_cns_qty),realized_pnl_usd:finiteOrNull(r.rzt_pls_amt),
+    })),
     foreign_krw_realized:null,
-    note:"국내 실현손익과 해외 USD 실현손익은 서로 다른 통화로 합산하지 않습니다. 원화 환산 실현손익은 검증된 원화 응답이 없으면 null입니다. 배당은 별도로 집계하며 미실현손익과도 구분합니다.",
+    source_api:"commonInquiryPeriodPnl",source_currency_verified_per_row:true,
+    broker_full_period_verified:false,
+    note:"신규 공통 손익 API에서 국내 KRW와 미국 USD를 별도 조회하며 합산하지 않습니다. 결과는 첫 응답만 반영하고 기간 전체 페이지·원화 과세표준은 검증되지 않았습니다. 배당은 별도입니다.",
   };
 }
 export function cashFlowClassifications(records:any[]){
@@ -84,12 +86,10 @@ function firstToday(day:string):string{
 async function reportRaw(config:Config,start:string,end:string){
   const account=await liveAccount(config);
   // Sequential calls preserve NH rate limit and avoid bulk retry storms.
-  const domestic=await callRest(config,"/krstock/inquiry/v1/dailyPnl",{act_no:account,iqr_sta_dt:start,iqr_end_dt:end});
-  verifyBrokerResponse(domestic,"domesticRealized");
-  const foreign=await callRest(config,"/gbstock/inquiry/v1/periodPnl",{
-    act_no:account,iqr_dit:"1",sta_orr_dt:start,end_orr_dt:end,fc_sec_trd_nat_cd:"200",trd_cur_cd:"USD"
-  });
-  verifyBrokerResponse(foreign,"overseasRealized");
+  const domestic=await callRest(config,"/common/inquiry/v1/periodPnl",commonPeriodInput(account,start,end,"KR","KRW"));
+  normalizeCommonPeriod(domestic,"KR");
+  const foreign=await callRest(config,"/common/inquiry/v1/periodPnl",commonPeriodInput(account,start,end,"US","USD"));
+  normalizeCommonPeriod(foreign,"US");
   const transactions=await callRest(config,"/gbstock/inquiry/v1/dailyTransaction",{
     act_no:account,iqr_sta_dt:start,iqr_end_dt:end,act_trd_cfc_cd:"00",iem_mlf_cd:"00001"
   });
