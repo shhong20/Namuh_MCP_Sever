@@ -5,6 +5,7 @@ import { callRest } from "./client.js";
 import { liveAccount } from "./history.js";
 import { summarizeBalances } from "./portfolio.js";
 import { classifyTaxReadiness, classifyDailyCandle, quoteRateLimitReached } from "./tax-safety.js";
+import { commonPeriodInput, normalizeCommonPeriod } from "./realized-pnl-common.js";
 
 const success=(v:unknown)=>({content:[{type:"text" as const,text:JSON.stringify(v)}]});
 const failure=(e:unknown)=>({isError:true,content:[{type:"text" as const,text:"조회 실패: "+String(e instanceof Error?e.message:e)}]});
@@ -27,10 +28,9 @@ export function registerTaxSafetyTools(server:McpServer,config:Config):void {
     const account=await liveAccount(config);
     const positions=await holdings(config,account);
     const end=String(year)+"1231";
-    const annual=await callRest(config,"/gbstock/inquiry/v1/periodPnl",{
-     act_no:account,iqr_dit:"2",sta_orr_dt:String(year)+"0101",
-     end_orr_dt:end<today?end:today,fc_sec_trd_nat_cd:"200",trd_cur_cd:"KRW"
-    });
+    const annual=await callRest(config,"/common/inquiry/v1/periodPnl",
+      commonPeriodInput(account,String(year)+"0101",end<today?end:today,"US","USD"));
+    normalizeCommonPeriod(annual,"US");
     return success(classifyTaxReadiness(positions,annual,year));
    }catch(e){return failure(e);}
   });

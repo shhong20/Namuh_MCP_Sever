@@ -29,16 +29,17 @@ export function classifyTaxReadiness(positions:UsTaxPosition[], yearly:any, year
   // execution exchange rates, costs and all-broker reconciliation.
   const code=String(yearly?.rsp_cd??"");
   const brokerAccepted=["00166","13578"].includes(code);
-  const rawPnl=yearly?.Output_0?.fc_rzt_pls_sum;
+  const rawPnl=yearly?.Output_1?.fc_rzt_pls_sum;
   const reportedUsd=rawPnl!==undefined&&rawPnl!==null&&rawPnl!==""&&Number.isFinite(Number(rawPnl))
     ?Number(rawPnl):null;
   return {
     ok:true,year,mode:"READ_ONLY_TAX_SCREEN",
-    source:"NH current securities and broker period PnL first response",
+    source:"NH current securities and new common period PnL first response",
     broker_yearly_query_ok:brokerAccepted,
     broker_code:code||null,
     broker_reported_yearly_realized_raw_first_response:brokerAccepted?reportedUsd:null,
     broker_period_pnl_currency_verified:false,
+    broker_reported_yearly_currency:"USD",
     broker_yearly_page_complete_verified:false,
     all_brokers_reconciled:false,
     tax_basis_krw_realized_verified:false,

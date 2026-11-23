@@ -5,7 +5,7 @@ import {
 } from "../dist/broker-audit.js";
 
 const page=(code,rows,cts=null,flag="N")=>({
- data:{rsp_cd:code,Output_0:{fc_rzt_pls_sum:0},Output_1:rows},
+ data:{rsp_cd:code,Output_1:{fc_rzt_pls_sum:0},Output_0:rows},
  continuation:{cts,flag}
 });
 
@@ -85,4 +85,10 @@ test("missing quote identity fails closed even with positive price",()=>{
  const x=quoteCrosscheck({symbol:"0193T0",quantity:38,broker_market_value_krw:0,last_price_krw:4640,quote_code:"00000",quote_timestamp:null});
  assert.equal(x.ok,false);
  assert.equal(x.reason,"QUOTE_SYMBOL_MISMATCH");
+});
+
+test("new common PnL missing optional rows on no-data code is not a completed annual tax ledger", async()=>{
+ const audit=await auditMonthlyBrokerEvidence("2026-11",async()=>({data:{rsp_cd:"13578"},continuation:{cts:null,flag:null}}));
+ assert.equal(audit.status,"NO_ROWS_REPORTED");
+ assert.equal(summarizeAnnualEvidence(2026,[audit]).broker_account_yearly_ledger_complete_verified,false);
 });

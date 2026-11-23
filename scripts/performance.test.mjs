@@ -4,8 +4,8 @@ import { realizedSummary, cashFlowClassifications, modifiedDietz, verifyBrokerRe
 
 test("realized PnL is kept in separate currencies and cash flows are not assumed",()=>{
  const s=realizedSummary(
-  {Output_0:{pls_amt_sum:-12000},Output_1:[{sby_dt:"20261102",pls_amt:-12000}]},
-  {Output_0:{fc_rzt_pls_sum:24.5},Output_1:[{orr_dt:"20261103",trd_cur_cd:"USD",fc_rzt_pls:24.5}]}
+  {rsp_cd:"00166",Output_1:{fc_rzt_pls_sum:-12000},Output_0:[{orr_dt:"20261102",cur_cd:"KRW",rzt_pls_amt:-12000}]},
+  {rsp_cd:"00166",Output_1:{fc_rzt_pls_sum:24.5},Output_0:[{orr_dt:"20261103",cur_cd:"USD",rzt_pls_amt:24.5}]}
  );
  assert.equal(s.domestic_realized_krw,-12000);
  assert.equal(s.foreign_realized_usd,24.5);
@@ -34,8 +34,7 @@ test("return is withheld if verified net assets or external cash flows are incom
  assert.throws(()=>modifiedDietz({...common,total_days:0,verified_full_account_nav:true,complete_external_flows:true}));
 });
 test("broker business response codes are per operation",()=>{
- verifyBrokerResponse({rsp_cd:"11512"},"domesticRealized");
  verifyBrokerResponse({rsp_cd:"13578"},"foreignTransactions");
- assert.throws(()=>verifyBrokerResponse({rsp_cd:"IGW42902"},"domesticRealized"));
+ assert.throws(()=>verifyBrokerResponse({rsp_cd:"IGW42902"},"foreignTransactions"));
  assert.throws(()=>verifyBrokerResponse({rsp_cd:"11512"},"foreignTransactions"));
 });
