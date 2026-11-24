@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh private NH capture diagnostic evidence
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=namuh-diagnostic-evidence.service
+
+[Install]
+WantedBy=timers.target

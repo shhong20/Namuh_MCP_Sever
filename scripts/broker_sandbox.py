@@ -36,6 +36,12 @@ def build(broker,task,*,home,relay,state,share,cache_only=False):
          "--setenv","HOME",str(home),"--setenv","PATH","/usr/bin:/bin","--setenv","TZ","Asia/Seoul",
          "--setenv","PYTHONDONTWRITEBYTECODE","1","--die-with-parent",
          "--setenv",("NH" if broker=="NH" else "KIS")+"_BROKER_RELAY_SOCKET","/tmp/relay/"+broker.lower()+".sock"]
+    if broker=="NH" and task=="mcp":
+        evidence=home/".local/state/namuh-diagnostic-evidence"
+        st=evidence.lstat()
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode&0o077:
+            raise RuntimeError("Unsafe diagnostic directory")
+        cmd+=["--ro-bind",str(evidence),"/tmp/diagnostic","--setenv","NH_DIAGNOSTIC_EVIDENCE","/tmp/diagnostic/evidence.json"]
     if broker=="KIS":
         cmd+=["--ro-bind",str(home/"miniconda3"),str(home/"miniconda3")]
     if cache_only:cmd+=["--setenv","BROKER_CACHE_ONLY","1"]

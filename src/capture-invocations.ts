@@ -1,3 +1,4 @@
+import {diagnosticEvidence,evidenceMetadata} from "./diagnostic-evidence.js";
 import {execFileSync} from "node:child_process";
 import {SERVICE_UNITS,eventOf,parseJournalText} from "./capture-ops.js";
 
@@ -102,18 +103,23 @@ function showFields(unit:string):Record<string,string>{
 }
 function parseTime(raw:string|undefined){
  if(!raw||raw==="n/a")return null;
- const m=raw.match(/^[A-Za-z]{3} (\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2}) KST$/);
+ const m=raw.match(/^[A-Za-z]{3} (\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) KST$/);
  if(!m)return null;
  const d=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+09:00`);
  return Number.isFinite(d.getTime())?d.toISOString():null;
 }
 export function captureInvocationReport(days=30){
+ const evidence=diagnosticEvidence(days);
+ if(evidence)return {...correlateSystemdInvocations(evidence.rows,evidence.statuses),lookback_days:days,...evidenceMetadata(evidence)};
  if(!Number.isInteger(days)||days<1||days>90)throw Error("조회일 범위는 1~90입니다.");
  const env={...process.env,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR||"/run/user/1000",
  DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS||"unix:path=/run/user/1000/bus"};
  const stdout=execFileSync("journalctl",["--user","--no-pager","-o","json",
  "--since",`${days} days ago`,...Object.values(SERVICE_UNITS).flatMap(x=>["-u",x])],
  {encoding:"utf8",timeout:10000,maxBuffer:4*1024*1024,env});
+ return {...correlateSystemdInvocations(parseJournalText(stdout),readUnitStatuses()),lookback_days:days};
+}
+export function readUnitStatuses(){
  const statuses:Partial<Record<Service,UnitStatus>>={};
  for(const [service,unit] of serviceNames){
   const s=showFields(unit),t=showFields(unit.replace(".service",".timer"));
@@ -122,5 +128,5 @@ export function captureInvocationReport(days=30){
    invocation_id:s.InvocationID||null,timer_last_trigger_utc:parseTime(t.LastTriggerUSec),
    timer_active:t.ActiveState? t.ActiveState==="active":null};
  }
- return {...correlateSystemdInvocations(parseJournalText(stdout),statuses),lookback_days:days};
+ return statuses;
 }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Export sanitized read-only NH capture diagnostics
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Namuh_MCP_Sever
+ExecStart=/usr/bin/node %h/Namuh_MCP_Sever/scripts/export_diagnostic_evidence.mjs
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+TimeoutStartSec=45

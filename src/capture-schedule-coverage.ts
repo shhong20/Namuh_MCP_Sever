@@ -1,3 +1,4 @@
+import {diagnosticEvidence,evidenceMetadata} from "./diagnostic-evidence.js";
 import {execFileSync} from "node:child_process";
 import {SERVICE_UNITS,eventOf,parseJournalText,type Event} from "./capture-ops.js";
 
@@ -106,6 +107,8 @@ function readSystemdJournal(days:number):string{
  return execFileSync("journalctl",args,{encoding:"utf8",timeout:10000,maxBuffer:4*1024*1024,env});
 }
 export function scheduleCoverageReport(days=30){
+ const evidence=diagnosticEvidence(days);
+ if(evidence){const events=evidence.rows.map(eventOf).filter((x):x is Event=>x!==null);return {...evaluateScheduleCoverage(events,evidence.boots,new Date(evidence.generated_utc),days),...evidenceMetadata(evidence)};}
  if(!Number.isInteger(days)||days<1||days>90)throw Error("조회일 범위는 1~90입니다");
  const events=parseJournalText(readSystemdJournal(days)).map(eventOf).filter((x):x is Event=>x!==null);
  const bootRaw=execFileSync("journalctl",["--list-boots","--no-pager","-o","json"],

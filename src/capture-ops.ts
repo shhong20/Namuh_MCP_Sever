@@ -1,3 +1,4 @@
+import {diagnosticEvidence,evidenceMetadata} from "./diagnostic-evidence.js";
 import {execFileSync} from "node:child_process";
 
 export const SERVICE_UNITS={
@@ -108,6 +109,8 @@ export function parseJournalText(stdout:string,limit=10000):Entry[]{
  return parsed;
 }
 export function captureOpsReport(days=30){
+ const evidence=diagnosticEvidence(days);
+ if(evidence)return {...summarizeCaptureOperations(evidence.rows,days),...evidenceMetadata(evidence)};
  if(!Number.isInteger(days)||days<1||days>90)throw new Error("조회일 범위는 1~90입니다.");
  const args=["--user","--no-pager","-o","json","--since",`${days} days ago`,
    ...Object.values(SERVICE_UNITS).flatMap(u=>["-u",u])];
