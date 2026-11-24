@@ -25,3 +25,16 @@ python3 -B scripts/broker_egress_probe.py
 6. Review rollback before deploying. Do not edit host-wide firewall, disable token encryption or restart unrelated services.
 
 Network namespaces alone do not protect against all same-user compromise or malicious host services. The pilot is not a production egress enforcement claim.
+
+## Relay transport canary
+
+Implemented fixed NH/KIS TLS-blind relay, socket owner/mode checks, peer UID check, 8 concurrent connections per relay and bounded timeouts. NH Node and KIS Python TLS clients verify the official hostname; when a relay socket variable is configured, a missing or broken socket fails closed without direct fallback. The relay currently supports only real-account official endpoints.
+
+Credential-free HEAD requests inside masked namespaces succeeded (NH HTTP 405; KIS HTTP 200). The explicit live read-only canary below used only copies of encrypted token caches and a narrowly bound systemd credentials socket. It returned NH current price HTTP 200 and complete KIS domestic balance without token issuance. It does not modify the original caches or output holdings/credentials.
+
+```bash
+npm run build
+python3 -B scripts/broker_egress_canary.py --live-readonly
+```
+
+Canary uses the local WSL project layout (including KIS miniconda Python), binds the repository read-only and masks /home, /run, /mnt, /tmp and /var/tmp before exposing required paths. Not an exhaustive IPC isolation proof. Production tunnel and scheduled jobs still use their original transport; do not set relay variables until service lifetime, sandbox mounts, scheduled job compatibility, and rollback have been verified.

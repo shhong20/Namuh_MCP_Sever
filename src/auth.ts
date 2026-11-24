@@ -1,3 +1,4 @@
+import {brokerFetch} from "./relay-transport.js";
 import {validateUrl,assertSecureTransport,type Config} from "./config.js";
 import {createHash,randomBytes} from "node:crypto";
 import {mkdir,lstat,readFile,open,rename,unlink} from "node:fs/promises";
@@ -98,7 +99,7 @@ async function issue(c:Config,scope:string){
  let last="NH_TOKEN_REQUEST_FAILED";
  for(let attempt=0;attempt<3;attempt++){
   let response:Response;
-  try{response=await fetch(url,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},redirect:"manual",signal:AbortSignal.timeout(10000)});}
+  try{response=await brokerFetch(url,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},redirect:"manual",signal:AbortSignal.timeout(10000)});}
   catch{last="NH_TOKEN_NETWORK_ERROR";if(attempt<2)await new Promise(r=>setTimeout(r,300*(attempt+1)));continue;}
   if(response.status>=300&&response.status<400)throw new Error("NH_REDIRECT_BLOCKED");
   if(response.ok){

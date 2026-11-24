@@ -1,3 +1,4 @@
+import {brokerFetch} from "./relay-transport.js";
 import { validateUrl, assertSecureTransport, type Config } from "./config.js";
 import { getAccessToken } from "./auth.js";
 
@@ -102,7 +103,7 @@ export async function callRest(
 
     console.error(JSON.stringify({broker:"NH",event:"outbound",kind:"data",origin:url.origin}));
     try {
-      res = await fetch(url.toString(), { method: "POST", headers, body, signal: AbortSignal.timeout(15000), redirect: "manual" });
+      res = await brokerFetch(url.toString(), { method: "POST", headers, body, signal: AbortSignal.timeout(15000), redirect: "manual" });
     } catch (e) {
       throw new NhplugApiError(
         "NH_NETWORK_ERROR",
