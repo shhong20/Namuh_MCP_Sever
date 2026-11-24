@@ -88,6 +88,7 @@ async function withLock<T>(scope:string,fn:()=>Promise<T>):Promise<T>{
  }finally{await handle.close();}
 }
 async function issue(c:Config,scope:string){
+ if(process.env.BROKER_CACHE_ONLY==="1")throw Error("NH_CANARY_ISSUANCE_FORBIDDEN");
  assertSecureTransport();
  const url=new URL(validateUrl(c.authUrl,"NHPLUG_AUTH_URL")+"/oauth2/token");
  audit("issue_attempt");

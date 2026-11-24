@@ -61,7 +61,8 @@ def collect(hours):
     result = {"generated_utc":dt.datetime.now(dt.timezone.utc).isoformat(),"window_hours":hours,
               "scope":"broker MCP application audit only; not packet-level evidence","brokers":{}}
     for broker,(unit,allowed) in BROKERS.items():
-        cmd = ["journalctl","--user","-u",unit,"--since",f"{hours} hours ago","-n",str(LIMIT+1),"-o","json","--no-pager","--quiet"]
+        units = [unit] + (["namuh-portfolio-snapshot.service","namuh-nav-candidate.service"] if broker=="NH" else ["kis-portfolio-snapshot.service"])
+        cmd = ["journalctl","--user",*[arg for name in units for arg in ("-u",name)],"--since",f"{hours} hours ago","-n",str(LIMIT+1),"-o","json","--no-pager","--quiet"]
         try:
             p = subprocess.run(cmd,capture_output=True,text=True,timeout=20)
             rows = p.stdout.splitlines()

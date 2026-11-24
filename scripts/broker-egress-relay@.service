@@ -1,0 +1,18 @@
+[Unit]
+Description=Fixed official brokerage TLS relay (%i)
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Namuh_MCP_Sever/scripts/broker_egress_relay.py --broker %i --socket-dir %t/broker-relay-%i
+RuntimeDirectory=broker-relay-%i
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=no
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+# Install as <unit>.service.d/50-broker-sandbox.conf, replacing @BROKER@ and @TASK@.
+# Keep the existing timer, working directory, and all other unit properties.
+[Unit]
+Requires=broker-egress-relay@@BROKER@.service
+After=broker-egress-relay@@BROKER@.service
+
+[Service]
+ExecStart=
+ExecStart=/usr/bin/python3 %h/Namuh_MCP_Sever/scripts/broker_sandbox.py @BROKER@ @TASK@
+# Existing capture journal readers expect this identifier for NH Node jobs.
+# Set SyslogIdentifier=node for NH only.
