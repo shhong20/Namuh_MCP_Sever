@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily private broker authentication audit
+
+[Timer]
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+Unit=broker-auth-audit.service
+
+[Install]
+WantedBy=timers.target

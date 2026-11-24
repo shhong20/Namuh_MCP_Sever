@@ -1,0 +1,10 @@
+[Unit]
+Description=Private broker authentication audit summary
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/Namuh_MCP_Sever/scripts/broker_auth_audit.py --hours 24 --save
+NoNewPrivileges=yes
+UMask=0077
+PrivateTmp=yes
+TimeoutStartSec=60
