@@ -38,3 +38,17 @@ test("reports read private evidence and reject stale or overpermissive data",()=
   assert.throws(()=>diagnosticEvidence(1),/INVALID/);
  }finally{if(prior===undefined)delete process.env.NH_DIAGNOSTIC_EVIDENCE;else process.env.NH_DIAGNOSTIC_EVIDENCE=prior;rmSync(root,{recursive:true,force:true});}
 });
+
+test("validation reason and capture gap survive export without arbitrary data",()=>{
+ const event={...row,_SYSTEMD_USER_UNIT:"namuh-capture-validation.service",MESSAGE:JSON.stringify({decision:"CAPTURE_INTEGRITY_REVIEW_REQUIRED",date:"2026-11-24",findings:["CAPTURE_TIMESTAMPS_MORE_THAN_30_MINUTES_APART","FAKE_SECRET"],capture_gap_minutes:323,pair_verified:false,account:"FAKE_ACCOUNT"})};
+ const sanitized=sanitizeRow(event);
+ const data=JSON.parse(sanitized.MESSAGE);
+ assert.deepEqual(data.findings,["CAPTURE_TIMESTAMPS_MORE_THAN_30_MINUTES_APART"]);
+ assert.equal(data.capture_gap_minutes,323);assert.equal(data.pair_verified,false);
+ assert.ok(!JSON.stringify(sanitized).includes("FAKE_"));
+ const root=mkdtempSync(join(tmpdir(),"diag-finding-"));const prior=process.env.NH_DIAGNOSTIC_EVIDENCE;
+ try{process.env.NH_DIAGNOSTIC_EVIDENCE=join(root,"evidence.json");save({version:1,generated_utc:new Date(now).toISOString(),rows:[sanitized],boots:[],statuses:{}},root);
+ const latest=captureOpsReport(1).services.validation.latest_event;
+ assert.equal(latest.capture_gap_minutes,323);assert.deepEqual(latest.findings,data.findings);
+ }finally{if(prior===undefined)delete process.env.NH_DIAGNOSTIC_EVIDENCE;else process.env.NH_DIAGNOSTIC_EVIDENCE=prior;rmSync(root,{recursive:true,force:true});}
+});

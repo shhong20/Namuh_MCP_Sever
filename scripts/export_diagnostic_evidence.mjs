@@ -20,7 +20,7 @@ export function sanitizeRow(r){
  const ev=eventOf(r);
  if(!ev)return null;
  return {...common,SYSLOG_IDENTIFIER:"node",_SYSTEMD_USER_UNIT:r._SYSTEMD_USER_UNIT,_SYSTEMD_INVOCATION_ID:id(r._SYSTEMD_INVOCATION_ID),
- MESSAGE:JSON.stringify({decision:ev.decision,date:ev.date,duration_ms:ev.duration_ms,source_pages:ev.source_pages,broker_calls:ev.broker_calls,failure_kind:ev.failure_kind,created:ev.created})};
+ MESSAGE:JSON.stringify({decision:ev.decision,date:ev.date,duration_ms:ev.duration_ms,source_pages:ev.source_pages,broker_calls:ev.broker_calls,failure_kind:ev.failure_kind,created:ev.created,findings:ev.findings,capture_gap_minutes:ev.capture_gap_minutes,pair_verified:ev.pair_verified})};
 }
 export function collect(){
  const env={...process.env,LC_ALL:"C",TZ:"Asia/Seoul",XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR||"/run/user/1000",DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS||"unix:path=/run/user/1000/bus"};

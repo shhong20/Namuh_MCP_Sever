@@ -19,11 +19,17 @@ const safeKinds=new Set([
  "AUTH_REQUIRES_REVIEW","BROKER_RATE_LIMIT","NETWORK_UNAVAILABLE","BROKER_HTTP_FAILURE",
  "SOURCE_PAGINATION_INCOMPLETE","BROKER_BUSINESS_RESPONSE_UNEXPECTED",
  "STORAGE_PERMISSION_OR_INTEGRITY","UNKNOWN_FAILURE"]);
+const safeFindings=new Set([
+ "HOLDINGS_MISSING_FOR_TODAY","NAV_CANDIDATE_MISSING_FOR_TODAY",
+ "INVALID_HOLDINGS_VALUE","INVALID_NAV_CANDIDATE_VALUE","NAV_CANDIDATE_INCORRECTLY_CLAIMS_VERIFICATION",
+ "BROKER_LINE_ITEM_RECONCILIATION_PENDING","UNKNOWN_CAPTURE_TIMESTAMPS","CAPTURE_TIMESTAMPS_MORE_THAN_30_MINUTES_APART"
+]);
 type Entry={_SYSTEMD_USER_UNIT?:string;USER_UNIT?:string;_SYSTEMD_INVOCATION_ID?:string;
  USER_INVOCATION_ID?:string;__REALTIME_TIMESTAMP?:string;MESSAGE?:string;SYSLOG_IDENTIFIER?:string;JOB_RESULT?:string};
 export type Event={service:Service;decision:Decision;date:string|null;timestamp:string|null;
  duration_ms:number|null;source_pages:number|null;broker_calls:number|null;
- failure_kind:string|null;created:boolean|null};
+ failure_kind:string|null;created:boolean|null;
+ findings?:string[];capture_gap_minutes?:number|null;pair_verified?:boolean};
 function positiveDuration(v:unknown):number|null{
  return typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=3600000?Math.round(v):null;
 }
@@ -48,7 +54,10 @@ export function eventOf(raw:Entry):Event|null{
   source_pages:nonnegativeInt(d.source_pages),
   broker_calls:nonnegativeInt(d.broker_calls),
   failure_kind:typeof d.failure_kind==="string"&&safeKinds.has(d.failure_kind)?d.failure_kind:null,
-  created:typeof d.created==="boolean"?d.created:null};
+  created:typeof d.created==="boolean"?d.created:null,
+  ...(service==="validation"&&Array.isArray(d.findings)?{findings:[...new Set(d.findings.filter((v):v is string=>typeof v==="string"&&safeFindings.has(v)))]}:{}),
+  ...(service==="validation"&&Object.hasOwn(d,"capture_gap_minutes")?{capture_gap_minutes:typeof d.capture_gap_minutes==="number"&&Number.isInteger(d.capture_gap_minutes)&&d.capture_gap_minutes>=0&&d.capture_gap_minutes<=1000000?d.capture_gap_minutes:null}:{}),
+  ...(service==="validation"&&typeof d.pair_verified==="boolean"?{pair_verified:d.pair_verified}:{})};
 }
 function pct(n:number,d:number):number|null{return d?Math.round(n*10000/d)/100:null;}
 export function summarizeCaptureOperations(raw:Entry[],retentionDays=30){
