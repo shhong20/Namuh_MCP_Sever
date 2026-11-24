@@ -1,8 +1,10 @@
-import type {Config} from "./config.js";
+import {validateUrl,assertSecureTransport,type Config} from "./config.js";
 import {createHash,randomBytes} from "node:crypto";
 import {mkdir,lstat,readFile,open,rename,unlink} from "node:fs/promises";
 import {homedir} from "node:os";
 import {join} from "node:path";
+import {constants} from "node:fs";
+import {spawn} from "node:child_process";
 
 type TokenState={scope:string;token:string;expiresAt:number};
 let cached:TokenState|null=null;
@@ -57,8 +59,28 @@ async function clearDisk(scope:string){
  const path=fileOf(scope);
  if(await protectedFile(path))await unlink(path);
 }
+function audit(event:string){console.error(JSON.stringify({broker:"NH",event,time:new Date().toISOString()}));}
+// Linux flock attaches to the inherited open-file description. The parent
+// retains the descriptor until the operation finishes; crashes release it.
+async function withLock<T>(scope:string,fn:()=>Promise<T>):Promise<T>{
+ await protectedDir();
+ const handle=await open(fileOf(scope)+".flock",constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);
+ try{
+  const st=await handle.stat();
+  if(!st.isFile()||(st.mode&0o077)!==0||st.uid!==process.getuid?.())throw new Error("NH_TOKEN_LOCK_INVALID");
+  await new Promise<void>((resolve,reject)=>{
+   const child=spawn("/usr/bin/flock",["-x","-w","45","3"],{stdio:["ignore","ignore","ignore",handle.fd]});
+   child.once("error",()=>reject(new Error("NH_TOKEN_LOCK_UNAVAILABLE")));
+   child.once("exit",code=>code===0?resolve():reject(new Error("NH_TOKEN_LOCK_TIMEOUT")));
+  });
+  return await fn();
+ }finally{await handle.close();}
+}
 async function issue(c:Config,scope:string){
- const url=new URL(c.authUrl+"/oauth2/token");
+ assertSecureTransport();
+ const url=new URL(validateUrl(c.authUrl,"NHPLUG_AUTH_URL")+"/oauth2/token");
+ audit("issue_attempt");
+ console.error(JSON.stringify({broker:"NH",event:"outbound",kind:"auth",origin:url.origin,path:"/oauth2/token"}));
  url.searchParams.set("appkey",c.appKey);
  url.searchParams.set("appsecretkey",c.appSecret);
  url.searchParams.set("grant_type","client_credentials");
@@ -66,8 +88,9 @@ async function issue(c:Config,scope:string){
  let last="NH_TOKEN_REQUEST_FAILED";
  for(let attempt=0;attempt<3;attempt++){
   let response:Response;
-  try{response=await fetch(url,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"}});}
+  try{response=await fetch(url,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},redirect:"manual",signal:AbortSignal.timeout(10000)});}
   catch{last="NH_TOKEN_NETWORK_ERROR";if(attempt<2)await new Promise(r=>setTimeout(r,300*(attempt+1)));continue;}
+  if(response.status>=300&&response.status<400)throw new Error("NH_REDIRECT_BLOCKED");
   if(response.ok){
    let data:any;
    try{data=await response.json();}catch{throw new Error("NH_TOKEN_INVALID_JSON");}
@@ -78,27 +101,32 @@ async function issue(c:Config,scope:string){
    const state={scope,token,expiresAt:Date.now()+Math.min(ttl,86400)*1000};
    await save(state);
    cached=state;
+   audit("issued");
    return token;
   }
   let code="";
   try{const d:any=await response.json();code=String(d?.error_code??d?.rsp_cd??"");}catch{}
   // Deliberately no URL, body or credential in this error.
-  last="NH_TOKEN_HTTP_"+response.status+(code?"_"+code:"");
+  last="NH_TOKEN_HTTP_"+response.status+(code==="IGW40054"?"_IGW40054":"");
   if(code==="IGW40054"&&attempt<2){await new Promise(r=>setTimeout(r,400*(attempt+1)));continue;}
   throw new Error(last);
  }
  throw new Error(last);
 }
-export async function getAccessToken(c:Config,force=false):Promise<string>{
+export async function getAccessToken(c:Config,force=false,failed?:string):Promise<string>{
+ assertSecureTransport();
+ validateUrl(c.authUrl,"NHPLUG_AUTH_URL");
+ validateUrl(c.baseUrl,"NHPLUG_BASE_URL");
  const scope=scopeOf(c);
- if(!force&&cached?.scope===scope&&cached.expiresAt>Date.now()+SKEW)return cached.token;
+ if(!force&&cached?.scope===scope&&cached.expiresAt>Date.now()+SKEW){audit("memory_reuse");return cached.token;}
  const current=inflight.get(scope);
  if(current)return current;
- const task=(async()=>{
-  if(force){cached=null;await clearDisk(scope);}
-  else{const saved=await load(scope);if(saved){cached=saved;return saved.token;}}
+ const task=withLock(scope,async()=>{
+  const saved=await load(scope);
+  if(saved&&(!force||(failed!==undefined&&saved.token!==failed))){cached=saved;audit("disk_reuse");return saved.token;}
+  if(force){if(cached?.scope===scope)cached=null;await clearDisk(scope);audit("revoked");}
   return issue(c,scope);
- })();
+ });
  inflight.set(scope,task);
  try{return await task;}finally{if(inflight.get(scope)===task)inflight.delete(scope);}
 }
@@ -106,9 +134,13 @@ export async function clearTokenCache(config?:Config):Promise<void>{
  const scope=config?scopeOf(config):cached?.scope;
  // A revoked token for a different app must not discard this app's healthy cache.
  if(cached?.scope===scope)cached=null;
- if(scope)await clearDisk(scope);
+ if(scope)await withLock(scope,()=>clearDisk(scope));
 }
-export function tokenCacheStatus(c:Config){
- return {memory_valid:cached?.scope===scopeOf(c)&&cached.expiresAt>Date.now()+SKEW,
-         disk_cache_enabled:true,request_in_flight:inflight.has(scopeOf(c))};
+export async function tokenCacheStatus(c:Config){
+ const scope=scopeOf(c);
+ const disk=await load(scope);
+ return {read_only:true,auth_origin:validateUrl(c.authUrl,"NHPLUG_AUTH_URL"),api_origin:validateUrl(c.baseUrl,"NHPLUG_BASE_URL"),
+         memory_valid:cached?.scope===scope&&cached.expiresAt>Date.now()+SKEW,
+         disk_valid:!!disk,expires_at:disk?new Date(disk.expiresAt).toISOString():null,
+         disk_cache_enabled:true,request_in_flight:inflight.has(scope),redirects_allowed:false};
 }

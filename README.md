@@ -116,7 +116,7 @@ Claude Desktop 설정 파일 `claude_desktop_config.json` 을 엽니다.
 | `NHPLUG_AUTH_URL` | | 토큰 발급 URL. 기본 `https://api.nhplug.com:8443` (운영 전용 — moapi 미제공). 보통 그대로 둡니다 |
 | `NHPLUG_ENABLE_TRADING` | | `true` 일 때만 주문(거래) 도구 노출. 기본 `false` |
 | `NHPLUG_DEFAULT_ACCOUNT` | | 잔고/주문 단축 도구에서 계좌번호 생략 시 사용 |
-| `NHPLUG_ALLOW_HOSTS` | | 사내 검증 서버 등 **허용 호스트 추가**(쉼표 구분). 보통 설정하지 않습니다 |
+| `NHPLUG_ALLOW_HOSTS` | | 개인 읽기전용 배포에서는 비활성화. 설정 시 인증 차단 |
 
 > 🔒 `NHPLUG_BASE_URL`·`NHPLUG_AUTH_URL` 은 **허용된 호스트만** 통과합니다
 > (`api`/`moapi` × `nhplug.com`/`n2plug.com` 4종). 한 글자만 틀려도 앱키·시크릿이 그대로 전송되므로,
@@ -302,3 +302,7 @@ MIT. 문의: apisupport@nhsec.com
 2026-11-23 실계좌의 11월 1~23일 구형·신형 조회 손익 합계가 국내 KRW 및 미국 USD에서 일치한 것을 확인했습니다.
 해당 검증은 전체 현금 포함 순자산·연간 거래 원장·세법상 확정 손익이 아닙니다.
 새 통합 API 4종 중 실제 사용하던 두 손익 조회 경로를 우선 대체했으며 주문·환전 차단은 그대로 유지합니다.
+
+### Personal WSL authentication security
+
+Linux `/usr/bin/flock` required. Official HTTPS endpoints only; no redirects or proxy overrides. `get_auth_security_status` inspects existing cache without issuing a token. Auth/outbound audit events go to stderr (no credentials, query, body or headers). Existing token JSON remains private (`0600`); it is not encrypted at rest. Run `npm run build` and `node --test scripts/*.test.mjs` before deployment; do not run the manual order CLI as a unit test.

@@ -28,7 +28,7 @@ globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({access_to
   assert.deepEqual(second,{calls:0,reused:true});
   const dir=join(home,".local","state","namuh-mcp");
   assert.equal(statSync(dir).mode&0o777,0o700);
-  const files=readdirSync(dir);
+  const files=readdirSync(dir).filter(f=>f.endsWith(".json"));
   assert.equal(files.length,1);
   assert.equal(statSync(join(dir,files[0])).mode&0o777,0o600);
   const data=readFileSync(join(dir,files[0]),"utf8");

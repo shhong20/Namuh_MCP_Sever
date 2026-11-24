@@ -44,46 +44,28 @@ function allowedHosts(): string[] {
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter((h) => h.length > 0);
-  return [...ALLOWED_HOSTS, ...extra];
+  if (extra.length) throw new Error("NHPLUG_EXTRA_HOSTS_DISABLED");
+  return [...ALLOWED_HOSTS];
 }
 
-/**
- * 자격증명이 나가는 URL 을 검증하고 정규화한다(끝 슬래시 제거).
- * 포트는 검사하지 않는다 — 포트 오타는 접속 실패로 즉시 드러나지만,
- * 호스트 오타는 자격증명이 그대로 전송된 뒤에야 드러나기 때문이다.
- */
-function validateUrl(raw: string, name: string): string {
-  const u = raw.trim().replace(/\/+$/, "");
-  if (u === "") {
-    throw new Error(`${name} 가 비어 있습니다. 예: https://api.nhplug.com:8443`);
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(u);
-  } catch {
-    throw new Error(`${name} 가 올바른 URL 이 아닙니다: ${u}\n  예: https://api.nhplug.com:8443`);
-  }
-  if (parsed.protocol !== "https:") {
-    throw new Error(`${name} 는 https 여야 합니다 — 앱키·시크릿이 평문으로 전송됩니다: ${u}`);
-  }
-  if (parsed.pathname !== "/" && parsed.pathname !== "") {
-    throw new Error(
-      `${name} 에는 경로를 넣지 마세요(호스트까지만): ${u}\n  예: https://api.nhplug.com:8443`
-    );
-  }
-  const host = parsed.hostname.toLowerCase();
-  const hosts = allowedHosts();
-  if (!hosts.includes(host)) {
-    throw new Error(
-      `${name} 의 호스트 '${host}' 는 허용되지 않습니다.\n` +
-        `  허용: ${hosts.join(", ")}\n` +
-        `  사내 검증 서버라면 ${ALLOW_HOSTS_VAR} 에 추가하세요 (예: ${ALLOW_HOSTS_VAR}=stg.example.com).`
-    );
-  }
-  return u;
+/** Fail closed: exact official HTTPS origin, no userinfo, path or query. */
+export function validateUrl(raw: string, name: string): string {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { throw new Error("NH_INVALID_ENDPOINT_"+name); }
+  if (u.protocol !== "https:" || u.port !== "8443" || u.username || u.password ||
+      u.pathname !== "/" || u.search || u.hash || !allowedHosts().includes(u.hostname) ||
+      (name === "NHPLUG_AUTH_URL" && !u.hostname.startsWith("api.")))
+    throw new Error("NH_ENDPOINT_NOT_ALLOWED_"+name);
+  return u.origin;
+}
+export function assertSecureTransport() {
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
+      ["HTTPS_PROXY","https_proxy","HTTP_PROXY","http_proxy","ALL_PROXY","all_proxy","NODE_USE_ENV_PROXY"].some(k=>!!process.env[k] && process.env[k]!=="0"))
+    throw new Error("NH_UNSAFE_TRANSPORT_ENV");
 }
 
 export function loadConfig(): Config {
+  assertSecureTransport();
   // Personal ChatGPT deployment: enforce read-only, even if an environment variable is set.
   // Never enable order tools through this fork without a separate reviewed code change.
   return {

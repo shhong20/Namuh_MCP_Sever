@@ -1,5 +1,5 @@
-import type { Config } from "./config.js";
-import { getAccessToken, clearTokenCache } from "./auth.js";
+import { validateUrl, assertSecureTransport, type Config } from "./config.js";
+import { getAccessToken } from "./auth.js";
 
 /**
  * 오류 응답에서 (코드, 메시지)를 꺼낸다 — 업무/게이트웨이 두 서식을 모두 본다.
@@ -77,14 +77,20 @@ export async function callRest(
   pageMetadata = false,
   ctsFlag?: string
 ): Promise<any> {
-  const url = `${config.baseUrl}${path}`;
+  assertSecureTransport();
+  const origin = validateUrl(config.baseUrl,"NHPLUG_BASE_URL");
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.includes("?") || path.includes("#"))
+    throw new Error("NH_INVALID_API_PATH");
+  const url = new URL(path,origin);
+  if (url.origin !== origin) throw new Error("NH_ENDPOINT_NOT_ALLOWED");
   const body = JSON.stringify({ Input_0: input });
+  let failedToken: string | undefined;
   let forceToken = false; // 401 일 때만 true. 429 등에는 절대 재발급하지 않는다.
   let res: Response | undefined;
   let text = "";
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const token = await getAccessToken(config, forceToken);
+    const token = await getAccessToken(config, forceToken, failedToken);
     const headers: Record<string, string> = {
       "x-client-id": config.appKey,
       "x-client-secret": config.appSecret,
@@ -94,19 +100,21 @@ export async function callRest(
     if (cts) headers["cts"] = cts;
     if (cts && ctsFlag) headers["cts_flag"] = ctsFlag;
 
+    console.error(JSON.stringify({broker:"NH",event:"outbound",kind:"data",origin:url.origin}));
     try {
-      res = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
+      res = await fetch(url.toString(), { method: "POST", headers, body, signal: AbortSignal.timeout(15000), redirect: "manual" });
     } catch (e) {
       throw new NhplugApiError(
-        `네트워크 오류. ${config.baseUrl} 접근 가능한 환경인지 확인하세요. 원인: ${String(e)}`,
+        "NH_NETWORK_ERROR",
         { category: "network", path, retryable: true, environment: config.baseUrl }
       );
     }
 
+    if (res.status >= 300 && res.status < 400) throw new Error("NH_REDIRECT_BLOCKED");
     text = await res.text();
     if (res.ok) break;
     if (attempt === 0 && isInvalidTokenError(res.status, text)) {
-      await clearTokenCache(config);
+      failedToken = token;
       forceToken = true;
       continue;
     }

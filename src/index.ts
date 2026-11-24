@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
+import { tokenCacheStatus } from "./auth.js";
 import { registerTools } from "./tools.js";
 import { registerPortfolioTools } from "./portfolio.js";
 import { registerTaxSafetyTools } from "./tax-safety-tools.js";
@@ -20,6 +21,10 @@ async function main() {
     version: "0.1.0",
   });
 
+  server.tool("get_auth_security_status","Read-only token cache and endpoint status; never issues tokens or returns credentials",{},async()=>{
+    try{return {content:[{type:"text" as const,text:JSON.stringify(await tokenCacheStatus(config))}]};}
+    catch{return {content:[{type:"text" as const,text:JSON.stringify({ok:false,reason:"NH_AUTH_STATUS_UNAVAILABLE"})}]};}
+  });
   registerTools(server, config);
   registerPortfolioTools(server, config);
   registerTaxSafetyTools(server, config);
