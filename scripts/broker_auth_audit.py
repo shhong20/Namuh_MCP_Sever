@@ -13,7 +13,7 @@ BROKERS = {
     "NH": ("namuh-mcp-tunnel.service", {"https://api.nhplug.com:8443","https://moapi.nhplug.com:8443","https://api.n2plug.com:8443","https://moapi.n2plug.com:8443"}),
     "KIS": ("kis-mcp-tunnel.service", {"https://openapi.koreainvestment.com:9443","https://openapivts.koreainvestment.com:29443"}),
 }
-EVENTS = {"issue_attempt","issued","memory_reuse","disk_reuse","revoked","outbound"}
+EVENTS = {"issue_attempt","issued","memory_reuse","disk_reuse","revoked","outbound","cache_encrypted"}
 LIMIT = 20000
 
 def summarize(lines, broker, allowed):
